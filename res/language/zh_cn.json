@@ -1,0 +1,16 @@
+{
+  "": "====================主窗口内容====================",
+  "window.title": "我的世界spigot插件图形化开发工具",
+  "window.mainMenu.file": "文件",
+  "window.mainMenu.file.setting": "设置",
+  "window.mainMenu.file.quit": "退出",
+  "": "====================开始标签页====================",
+  "miniWindow.startPage.title": "开始标签页",
+  "": "====================文件管理器====================",
+  "miniWindow.fileManager.title": "文件管理器",
+  "miniWindow.fileManager.selectFile": "请选择要打开的路径",
+  "miniWindow.fileManager.pleaseSelectFile": "请打开一个路径",
+  "miniWindow.fileManager.emptyFolders": "(空文件夹)",
+  "": "====================提示====================",
+  "tip.file.load.failed": "文件加载失败"
+}
