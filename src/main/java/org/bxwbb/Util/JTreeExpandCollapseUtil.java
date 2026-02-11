@@ -27,7 +27,7 @@ public class JTreeExpandCollapseUtil {
         // 使用SwingWorker在后台线程执行展开逻辑（Swing官方推荐）
         SwingWorker<Void, Void> expandWorker = new SwingWorker<>() {
             @Override
-            protected Void doInBackground() throws Exception {
+            protected Void doInBackground() {
                 // 后台线程：递归展开所有节点（耗时操作）
                 expandAllChildNodes(tree, targetNode);
                 return null;
@@ -44,7 +44,6 @@ public class JTreeExpandCollapseUtil {
                 } catch (InterruptedException | ExecutionException e) {
                     JOptionPane.showMessageDialog(tree.getTopLevelAncestor(),
                             "展开节点失败：" + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
-                    e.printStackTrace();
                 }
             }
         };
@@ -70,7 +69,7 @@ public class JTreeExpandCollapseUtil {
 
         SwingWorker<Void, Void> collapseWorker = new SwingWorker<>() {
             @Override
-            protected Void doInBackground() throws Exception {
+            protected Void doInBackground() {
                 // 后台线程：递归折叠所有节点
                 collapseAllChildNodes(tree, targetNode, collapseSelf);
                 return null;
@@ -86,7 +85,6 @@ public class JTreeExpandCollapseUtil {
                 } catch (InterruptedException | ExecutionException e) {
                     JOptionPane.showMessageDialog(tree.getTopLevelAncestor(),
                             "折叠节点失败：" + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
-                    e.printStackTrace();
                 }
             }
         };

@@ -15,7 +15,6 @@ public class ResizablePanel extends JPanel {
     private DragPosition dragStartPos;
     private int startX, startY;
     private int startW, startH;
-    private int startPanelX, startPanelY;
 
     public ResizablePanel() {
         initMouseListener();
@@ -35,8 +34,6 @@ public class ResizablePanel extends JPanel {
                 startY = e.getYOnScreen();
                 startW = getWidth();
                 startH = getHeight();
-                startPanelX = getX();
-                startPanelY = getY();
 
                 fireResizeStarted(new ResizeEvent(ResizablePanel.this, pos, 0, 0, startW, startH));
             }
