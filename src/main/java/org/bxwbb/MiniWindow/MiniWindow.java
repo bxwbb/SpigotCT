@@ -14,10 +14,10 @@ import java.util.Objects;
 public abstract class MiniWindow extends ResizablePanel {
 
     private static final Logger log = LoggerFactory.getLogger(MiniWindow.class);
-    private JPanel topPanel = new JPanel();
-    private JPanel centerPanel = new JPanel();
     public String NAME = "错误";
     public String ICON_PATH = "/SpigotCT/icon/MiniWindowIcon/StartPage.png";
+    private JPanel topPanel = new JPanel();
+    private JPanel centerPanel = new JPanel();
 
     public MiniWindow(Class<? extends MiniWindow> clazz) {
         super();
@@ -36,12 +36,11 @@ public abstract class MiniWindow extends ResizablePanel {
 
     public abstract void init();
 
-    public record IconItem(ImageIcon imageIcon, String text) {}
-
     @Override
     public Cursor getCursorByPosition(DragPosition pos) {
         return switch (pos) {
-            case CORNER_TOP_LEFT, CORNER_BOTTOM_RIGHT, CORNER_TOP_RIGHT, CORNER_BOTTOM_LEFT -> Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
+            case CORNER_TOP_LEFT, CORNER_BOTTOM_RIGHT, CORNER_TOP_RIGHT, CORNER_BOTTOM_LEFT ->
+                    Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
             case BORDER_TOP, BORDER_BOTTOM -> Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR);
             case BORDER_LEFT, BORDER_RIGHT -> Cursor.getPredefinedCursor(Cursor.W_RESIZE_CURSOR);
             default -> Cursor.getDefaultCursor();
@@ -101,10 +100,12 @@ public abstract class MiniWindow extends ResizablePanel {
             }
 
             @Override
-            public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {}
+            public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
+            }
 
             @Override
-            public void popupMenuCanceled(PopupMenuEvent e) {}
+            public void popupMenuCanceled(PopupMenuEvent e) {
+            }
         });
         comboBox.addActionListener(e -> {
             IconItem item = (IconItem) comboBox.getSelectedItem();
@@ -117,7 +118,7 @@ public abstract class MiniWindow extends ResizablePanel {
                     miniWindow.setSize(comboBox.getParent().getParent().getSize());
                 } catch (InstantiationException | IllegalAccessException | InvocationTargetException |
                          NoSuchMethodException ex) {
-                    log.error("切换窗口类型出现错误",  ex);
+                    log.error("切换窗口类型出现错误", ex);
                     return;
                 }
                 // 使用miniWindow替换parent中的this
@@ -259,6 +260,12 @@ public abstract class MiniWindow extends ResizablePanel {
         return topPanel;
     }
 
+    public void setTopPanel(JPanel topPanel) {
+        this.topPanel = topPanel;
+        topPanel.setBackground(Setting.BACKGROUND_COLOR);
+        this.add(topPanel, BorderLayout.NORTH);
+    }
+
     public JPanel getCenterPanel() {
         return centerPanel;
     }
@@ -267,12 +274,6 @@ public abstract class MiniWindow extends ResizablePanel {
         this.centerPanel = centerPanel;
         centerPanel.setBackground(Setting.BACKGROUND_COLOR);
         this.add(centerPanel, BorderLayout.CENTER);
-    }
-
-    public void setTopPanel(JPanel topPanel) {
-        this.topPanel = topPanel;
-        topPanel.setBackground(Setting.BACKGROUND_COLOR);
-        this.add(topPanel, BorderLayout.NORTH);
     }
 
     public MiniWindow createSameTypeWindow() throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
@@ -284,6 +285,9 @@ public abstract class MiniWindow extends ResizablePanel {
         this.setPreferredSize(dimension);
         this.setMaximumSize(dimension);
         this.setMinimumSize(new Dimension(Setting.windowSplitDistance, Setting.windowSplitDistance));
+    }
+
+    public record IconItem(ImageIcon imageIcon, String text) {
     }
 
 }

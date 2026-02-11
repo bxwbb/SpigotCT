@@ -1,7 +1,5 @@
 package org.bxwbb.MiniWindow;
 
-import org.bxwbb.Setting;
-
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -11,68 +9,13 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class ResizablePanel extends JPanel {
+    private final Set<ResizeListener> resizeListeners = new HashSet<>();
     private int resizeBorderWidth = 8;
     private boolean isResizing = false;
     private DragPosition dragStartPos;
     private int startX, startY;
     private int startW, startH;
     private int startPanelX, startPanelY;
-
-    public enum DragPosition {
-        BORDER_TOP, BORDER_BOTTOM, BORDER_LEFT, BORDER_RIGHT,
-        CORNER_TOP_LEFT, CORNER_TOP_RIGHT, CORNER_BOTTOM_LEFT, CORNER_BOTTOM_RIGHT,
-        NONE
-    }
-
-    public static class ResizeEvent extends java.util.EventObject {
-        private final DragPosition dragPosition;
-        private final int dx;
-        private final int dy;
-        private final int currentW;
-        private final int currentH;
-
-        public ResizeEvent(ResizablePanel source, DragPosition dragPosition, int dx, int dy, int currentW, int currentH) {
-            super(source);
-            this.dragPosition = dragPosition;
-            this.dx = dx;
-            this.dy = dy;
-            this.currentW = currentW;
-            this.currentH = currentH;
-        }
-
-        public DragPosition getDragPosition() {
-            return dragPosition;
-        }
-
-        public int getDx() {
-            return dx;
-        }
-
-        public int getDy() {
-            return dy;
-        }
-
-        public int getCurrentW() {
-            return currentW;
-        }
-
-        public int getCurrentH() {
-            return currentH;
-        }
-    }
-
-    public interface ResizeListener extends EventListener {
-        default void resizeStarted(ResizeEvent e) {
-        }
-
-        default void resizing(ResizeEvent e) {
-        }
-
-        default void resizeEnded(ResizeEvent e) {
-        }
-    }
-
-    private final Set<ResizeListener> resizeListeners = new HashSet<>();
 
     public ResizablePanel() {
         initMouseListener();
@@ -191,14 +134,68 @@ public class ResizablePanel extends JPanel {
         resizeListeners.remove(listener);
     }
 
+    public int getResizeBorderWidth() {
+        return resizeBorderWidth;
+    }
+
     public void setResizeBorderWidth(int width) {
         if (width > 0) {
             this.resizeBorderWidth = width;
         }
     }
 
-    public int getResizeBorderWidth() {
-        return resizeBorderWidth;
+    public enum DragPosition {
+        BORDER_TOP, BORDER_BOTTOM, BORDER_LEFT, BORDER_RIGHT,
+        CORNER_TOP_LEFT, CORNER_TOP_RIGHT, CORNER_BOTTOM_LEFT, CORNER_BOTTOM_RIGHT,
+        NONE
+    }
+
+    public interface ResizeListener extends EventListener {
+        default void resizeStarted(ResizeEvent e) {
+        }
+
+        default void resizing(ResizeEvent e) {
+        }
+
+        default void resizeEnded(ResizeEvent e) {
+        }
+    }
+
+    public static class ResizeEvent extends java.util.EventObject {
+        private final DragPosition dragPosition;
+        private final int dx;
+        private final int dy;
+        private final int currentW;
+        private final int currentH;
+
+        public ResizeEvent(ResizablePanel source, DragPosition dragPosition, int dx, int dy, int currentW, int currentH) {
+            super(source);
+            this.dragPosition = dragPosition;
+            this.dx = dx;
+            this.dy = dy;
+            this.currentW = currentW;
+            this.currentH = currentH;
+        }
+
+        public DragPosition getDragPosition() {
+            return dragPosition;
+        }
+
+        public int getDx() {
+            return dx;
+        }
+
+        public int getDy() {
+            return dy;
+        }
+
+        public int getCurrentW() {
+            return currentW;
+        }
+
+        public int getCurrentH() {
+            return currentH;
+        }
     }
 
 }

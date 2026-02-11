@@ -5,6 +5,7 @@
     "icon\\open_folder.png",
     "icon\\close_folder.png"
   ],
+  "empty_folder": "icon\\empty_folder.png",
   "define_files": {
     ".*\\.exe": "icon\\files\\exe.png",
     ".*\\.rar": "icon\\files\\rar.png",

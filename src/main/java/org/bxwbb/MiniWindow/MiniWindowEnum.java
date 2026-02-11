@@ -7,8 +7,6 @@ import java.util.Map;
 
 public class MiniWindowEnum {
 
-    public record MiniWindowInfo(Class<? extends MiniWindow> clazz, String path) {}
-
     private static final Map<String, MiniWindowInfo> WINDOW_INFO_MAP = new HashMap<>();
 
     static {
@@ -39,6 +37,9 @@ public class MiniWindowEnum {
      */
     public static void removeWindow(String name) {
         WINDOW_INFO_MAP.remove(name);
+    }
+
+    public record MiniWindowInfo(Class<? extends MiniWindow> clazz, String path) {
     }
 
 }

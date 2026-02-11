@@ -12,11 +12,9 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -27,31 +25,19 @@ import java.util.regex.Pattern;
 
 public class FileUtil {
 
+    public static final ExecutorService FILE_IO_EXECUTOR;
+    // 语言缓存键值对
+    public final static Map<String, String> LANG_MAP = new java.util.HashMap<>();
     private static final Logger log = LoggerFactory.getLogger(FileUtil.class);
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("(?<!\\\\)\\{(\\d+)}");
     // 项目核心保存目录
     public static String ROOT_PATH = "F:\\McServer\\Plugin\\SpigotCT\\src";
     // 项目核心读取目录列表
     public static List<String> READ_PATH_LIST = List.of(
             "F:\\McServer\\Plugin\\SpigotCT\\res"
     );
-
-    public static final ExecutorService FILE_IO_EXECUTOR;
-
-    static {
-        FILE_IO_EXECUTOR = Executors.newFixedThreadPool(3, new ThreadFactory() {
-            private int threadCount = 0;
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread thread = new Thread(r, "FileOperation-Thread-" + (++threadCount));
-                thread.setDaemon(true);
-                thread.setUncaughtExceptionHandler((t, e) -> log.error("文件操作线程异常 -> ", e));
-                return thread;
-            }
-        });
-    }
-
-    // 语言缓存键值对
-    public final static Map<String, String> LANG_MAP = new java.util.HashMap<>();
+    // 空文件夹图标
+    public static String EMPTY_FOLDER_ICON;
     // 使用的语言
     public static String LANG_NAME;
     public static File languageJsonFile;
@@ -66,6 +52,20 @@ public class FileUtil {
     public static String[] DEFAULT_FOLDER_ICON = new String[2];
     // 根文件夹图标
     public static String ROOT_FOLDER_ICON;
+
+    static {
+        FILE_IO_EXECUTOR = Executors.newFixedThreadPool(3, new ThreadFactory() {
+            private int threadCount = 0;
+
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread thread = new Thread(r, "FileOperation-Thread-" + (++threadCount));
+                thread.setDaemon(true);
+                thread.setUncaughtExceptionHandler((t, e) -> log.error("文件操作线程异常 -> ", e));
+                return thread;
+            }
+        });
+    }
 
     public static void shutdown() {
         FILE_IO_EXECUTOR.shutdown();
@@ -89,8 +89,6 @@ public class FileUtil {
         }
         if (languageJsonFile == null) log.error("查询结束，未找到语言文件");
     }
-
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("(?<!\\\\)\\{(\\d+)}");
 
     /**
      * 多语言获取核心方法：索引占位符+可变参数+转义花括号+索引匹配警告
@@ -257,6 +255,9 @@ public class FileUtil {
                         FILE_ICON_MAP.put(s, files.getString(s));
                     }
                 }
+                if (jsonObject.containsKey("empty_folder")) {
+                    EMPTY_FOLDER_ICON = jsonObject.getString("empty_folder");
+                }
             } catch (Exception e) {
                 log.error("输入流解析JSON失败 - {}", e.getMessage());
             }
@@ -276,7 +277,6 @@ public class FileUtil {
                         return icon;
                     }
                 }
-                log.warn("未知的文件图标索引 - {}", key);
                 Image icon = new ImageIcon(Objects.requireNonNull(loadFile(DEFAULT_FILE_ICON)).getPath()).getImage();
                 icon = icon.getScaledInstance(width, height, Image.SCALE_SMOOTH);
                 return icon;
@@ -297,8 +297,11 @@ public class FileUtil {
                     Image icon = new ImageIcon(Objects.requireNonNull(loadFile(FOLDER_ICON_MAP.get(key))).getPath()).getImage();
                     icon = icon.getScaledInstance(width, height, Image.SCALE_SMOOTH);
                     return icon;
+                } else if (isEmptyFolder(file)) {
+                    Image icon = new ImageIcon(Objects.requireNonNull(loadFile(EMPTY_FOLDER_ICON)).getPath()).getImage();
+                    icon = icon.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+                    return icon;
                 } else {
-//                    log.warn("未知的文件夹图标索引 - {}", key);
                     Image icon;
                     if (open) {
                         icon = new ImageIcon(Objects.requireNonNull(loadFile(DEFAULT_FOLDER_ICON[0])).getPath()).getImage();
@@ -332,6 +335,130 @@ public class FileUtil {
         }
         log.error("加载文件失败 - {}", path);
         return null;
+    }
+
+    /**
+     * 获取加载中的图标
+     */
+    public static ImageIcon getLoadingIcon() {
+        Image icon = new ImageIcon(Objects.requireNonNull(Main.class.getResource("/SpigotCT/icon/Loading.png"))).getImage();
+        icon = icon.getScaledInstance(18, 18, Image.SCALE_SMOOTH);
+        return new ImageIcon(icon);
+    }
+
+    public static boolean isEmptyFolder(File folder) {
+        if (folder == null || !folder.exists() || !folder.isDirectory()) return true;
+        File[] files = folder.listFiles();
+        if (files == null) {
+            return false;
+        }
+        return files.length == 0;
+    }
+
+    public static void openFile(File file) throws IOException {
+        if (file == null || !file.exists()) return;
+        Desktop.getDesktop().open(file);
+    }
+
+    /**
+     * 异步递归统计文件夹内所有文件数量（包含子文件夹及子文件夹内的所有文件）
+     * 操作在FILE_IO_EXECUTOR线程池中执行，避免阻塞主线程
+     * @param file 要统计的文件/文件夹对象
+     * @param callback 统计完成后的回调（结果通过回调返回）
+     */
+    public static void countAllFilesAsync(File file, CountFileCallback callback) {
+        // 空回调防护
+        CountFileCallback safeCallback = callback == null ? (count) -> {} : callback;
+
+        // 提交任务到文件IO线程池
+        FILE_IO_EXECUTOR.submit(() -> {
+            int result = countAllFilesSync(file);
+            // 执行回调（如需在Swing UI线程执行回调，可添加SwingUtilities.invokeLater）
+            safeCallback.onCountCompleted(result);
+        });
+    }
+
+    /**
+     * 同步版本：递归统计文件夹内所有文件数量（核心逻辑，供异步方法调用）
+     * @param file 要统计的文件/文件夹对象
+     * @return 统计结果：
+     *         - 0：空文件夹（无任何文件/子文件夹）
+     *         - >0：文件夹内的总文件数量（包含所有层级子文件）
+     *         - -1：file不是文件夹/不存在/无法访问/权限不足等异常情况
+     */
+    public static int countAllFilesSync(File file) {
+        // 1. 基础校验：文件不存在/不是文件夹 → 返回-1
+        if (file == null || !file.exists() || !file.isDirectory()) {
+            log.warn("统计文件数量失败：文件不存在或不是文件夹 - {}", file == null ? "null" : file.getPath());
+            return -1;
+        }
+
+        // 2. 权限校验：无法读取文件夹 → 返回-1
+        if (!file.canRead()) {
+            log.warn("统计文件数量失败：无读取权限 - {}", file.getPath());
+            return -1;
+        }
+
+        // 3. 递归统计核心逻辑
+        return countFilesRecursively(file);
+    }
+
+    /**
+     * 递归统计指定文件夹下的所有文件数量（修复漏统计、异常处理问题）
+     * @param folder 目标文件夹
+     * @return 文件夹下所有文件的总数（仅统计文件，不含目录）
+     */
+    private static int countFilesRecursively(File folder) {
+        // 前置校验：文件夹不存在/不是目录，直接返回0
+        if (folder == null || !folder.exists() || !folder.isDirectory()) {
+            return 0;
+        }
+
+        int totalCount = 0;
+        // 替换listFiles()为更鲁棒的遍历方式，添加文件过滤器
+        File[] files = folder.listFiles(pathname -> {
+            // 跳过符号链接（可选，根据需求调整）
+            return !Files.isSymbolicLink(pathname.toPath());
+        });
+
+        // 处理listFiles返回null的情况（权限不足、文件被占用等）
+        if (files == null) {
+            log.warn("警告：无法访问目录 {}（权限不足/文件被占用）", folder.getAbsolutePath());
+            return 0;
+        }
+
+        for (File f : files) {
+            try {
+                // 确保文件/目录存在（避免遍历过程中文件被删除）
+                if (!f.exists()) {
+                    continue;
+                }
+
+                if (f.isFile()) {
+                    totalCount++;
+                } else if (f.isDirectory()) {
+                    // 递归统计子目录中的文件
+                    totalCount += countFilesRecursively(f);
+                }
+            } catch (SecurityException e) {
+                // 捕获权限异常，避免程序中断，仅打印日志
+                log.warn("警告：无权限访问 {} - {}", f.getAbsolutePath(), e.getMessage());
+            }
+        }
+
+        return totalCount;
+    }
+
+    /**
+     * 统计文件数量的回调接口（用于异步返回结果）
+     */
+    @FunctionalInterface
+    public interface CountFileCallback {
+        /**
+         * 统计完成回调
+         * @param count 统计结果（0=空文件夹，>0=文件总数，-1=异常）
+         */
+        void onCountCompleted(int count);
     }
 
 }

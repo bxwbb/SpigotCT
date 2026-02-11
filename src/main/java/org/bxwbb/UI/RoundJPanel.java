@@ -40,6 +40,10 @@ public class RoundJPanel extends JPanel {
         initConfig();
     }
 
+    public RoundJPanel(BorderLayout borderLayout) {
+        super(borderLayout);
+    }
+
     private void initConfig() {
         setOpaque(false);
         setDoubleBuffered(true);

@@ -43,9 +43,10 @@ public class RoundLabel extends JLabel {
 
     /**
      * 带圆角的构造方法（常用）
-     * @param text 显示文本
+     *
+     * @param text        显示文本
      * @param roundRadius 圆角半径
-     * @param bgColor 背景色
+     * @param bgColor     背景色
      */
     public RoundLabel(String text, int roundRadius, Color bgColor) {
         super(text);
@@ -56,10 +57,11 @@ public class RoundLabel extends JLabel {
 
     /**
      * 带图片+文字+圆角的构造方法（常用）
-     * @param text 显示文本
-     * @param icon 显示图片
+     *
+     * @param text        显示文本
+     * @param icon        显示图片
      * @param roundRadius 圆角半径
-     * @param bgColor 背景色
+     * @param bgColor     背景色
      */
     public RoundLabel(String text, Icon icon, int roundRadius, Color bgColor) {
         super(text, icon, SwingConstants.CENTER);
@@ -82,6 +84,7 @@ public class RoundLabel extends JLabel {
     }
 
     // ========== 核心：重写绘制方法 ==========
+
     /**
      * 绘制圆角背景+边框
      */
@@ -146,6 +149,10 @@ public class RoundLabel extends JLabel {
         return roundShape != null && roundShape.contains(x, y);
     }
 
+    public int getRoundRadius() {
+        return roundRadius;
+    }
+
     // ========== 对外暴露的自定义方法 ==========
     // 设置圆角半径（自动重绘）
     public void setRoundRadius(int roundRadius) {
@@ -153,8 +160,8 @@ public class RoundLabel extends JLabel {
         repaint();
     }
 
-    public int getRoundRadius() {
-        return roundRadius;
+    public Color getBorderColor() {
+        return borderColor;
     }
 
     // 设置边框颜色（自动重绘）
@@ -163,8 +170,8 @@ public class RoundLabel extends JLabel {
         repaint();
     }
 
-    public Color getBorderColor() {
-        return borderColor;
+    public int getBorderWidth() {
+        return borderWidth;
     }
 
     // 设置边框宽度（自动重绘）
@@ -173,8 +180,8 @@ public class RoundLabel extends JLabel {
         repaint();
     }
 
-    public int getBorderWidth() {
-        return borderWidth;
+    public int getIconTextGap() {
+        return iconTextGap;
     }
 
     // 重写图文间距（保持父类逻辑，仅增加重绘）
@@ -183,9 +190,5 @@ public class RoundLabel extends JLabel {
         this.iconTextGap = iconTextGap;
         super.setIconTextGap(iconTextGap);
         repaint();
-    }
-
-    public int getIconTextGap() {
-        return iconTextGap;
     }
 }

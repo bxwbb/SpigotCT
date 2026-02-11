@@ -3,6 +3,8 @@ package org.bxwbb;
 import com.formdev.flatlaf.FlatDarculaLaf;
 import org.bxwbb.MiniWindow.StartPage;
 import org.bxwbb.Util.FileUtil;
+import org.bxwbb.Util.ScheduledTaskManager;
+import org.bxwbb.WorkEventer.WorkController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,11 +12,11 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.event.WindowStateListener;
 
 public class Main {
 
     private static final Logger log = LoggerFactory.getLogger(Main.class);
+    private static WorkController workController;
 
     public static void main(String[] args) {
         setup();
@@ -29,7 +31,7 @@ public class Main {
         FlatDarculaLaf.setup();
         JFrame jFrame = new JFrame(FileUtil.getLang("window.title") + " -BY BXWBB bilibili:1814140675 QQ:3754934636");
         jFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        jFrame.setSize(1600,1000);
+        jFrame.setSize(1600, 1000);
         jFrame.setLocation(150, 20);
 
         // 创建顶部菜单
@@ -51,6 +53,11 @@ public class Main {
         jPanel.setLayout(boxLayout);
         jPanel.add(new StartPage());
         jFrame.add(jPanel, BorderLayout.CENTER);
+        JPanel bottomPanel = new JPanel();
+        bottomPanel.add(Box.createHorizontalGlue());
+        workController = new WorkController();
+        bottomPanel.add(workController.getShowButton().getShowButton());
+        jFrame.add(bottomPanel, BorderLayout.SOUTH);
         jFrame.setJMenuBar(menuBar);
         jFrame.setVisible(true);
 
@@ -61,9 +68,15 @@ public class Main {
                 log.info("关闭文件输入输出线程池...");
                 FileUtil.shutdown();
                 log.info("关闭文件输入输出线程池...完成");
+                log.info("关闭定时任务线程池...");
+                ScheduledTaskManager.getInstance().shutdown();
+                log.info("关闭定时任务线程池...完成");
             }
         });
 
     }
 
+    public static WorkController getWorkController() {
+        return workController;
+    }
 }
