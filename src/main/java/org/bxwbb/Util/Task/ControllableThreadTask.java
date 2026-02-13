@@ -150,7 +150,6 @@ public abstract class ControllableThreadTask<V> extends ControllableTask<V> {
         isRunning.set(false);
         // 停止状态检测任务
         ScheduledTaskManager.getInstance().stopTask(statusCheckTaskId);
-        log.info("任务清理完成，状态检测任务已停止");
     }
 
     // ===================== 状态查询方法 =====================

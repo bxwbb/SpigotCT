@@ -133,6 +133,7 @@ public abstract class MiniWindow extends ResizablePanel {
                     log.warn("未获取到comboBox的索引，将插入到容器最后位置");
                 }
 
+                MiniWindow.this.delete();
                 parent.remove(comboBox.getParent().getParent());
 
                 parent.add(miniWindow, comboIndex);
@@ -255,6 +256,8 @@ public abstract class MiniWindow extends ResizablePanel {
 
         });
     }
+
+    public abstract void delete();
 
     public JPanel getTopPanel() {
         return topPanel;

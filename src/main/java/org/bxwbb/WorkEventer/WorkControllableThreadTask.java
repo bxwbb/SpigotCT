@@ -3,6 +3,7 @@ package org.bxwbb.WorkEventer;
 import org.bxwbb.Main;
 import org.bxwbb.UI.MissionTip;
 import org.bxwbb.Util.Task.ControllableThreadPool;
+import org.bxwbb.Util.Task.ScheduledTaskManager;
 
 public class WorkControllableThreadTask extends Work {
 

@@ -264,7 +264,6 @@ public class ScheduledTaskManager {
 
                     // 2. 检查任务是否已被停止（避免重复提交）
                     if (!taskMap.containsKey(taskId) || (wrapper.future != null && wrapper.future.isCancelled())) {
-                        log.info("动态延迟任务已停止，不再提交（任务ID：{}）", taskId);
                         return;
                     }
 
@@ -288,9 +287,6 @@ public class ScheduledTaskManager {
 
         // 立即提交第一次执行（初始延迟=最小延迟）
         wrapper.future = scheduledExecutor.schedule(dynamicTask, minDelayMillis, TimeUnit.MILLISECONDS);
-
-        log.info("指数型动态延迟任务已启动（任务ID：{}），最小延迟{}毫秒，最大延迟{}毫秒",
-                taskId, minDelayMillis, maxDelayMillis);
         return taskId;
     }
 

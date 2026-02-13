@@ -325,4 +325,98 @@ public class ClipboardUtil {
             return new ArrayList<>(fileList); // 返回拷贝，避免外部修改
         }
     }
+
+    /**
+     * 获取剪贴板最新内容（支持文本、文件列表类型）
+     * @return 剪贴板内容封装对象（包含类型和具体内容）
+     * @throws IllegalStateException 系统剪贴板不可用（如无AWT环境）
+     * @throws UnsupportedFlavorException 不支持的剪贴板内容类型
+     * @throws IOException 剪贴板读取失败
+     */
+    public static ClipboardContent getClipboardContent() throws IllegalStateException, UnsupportedFlavorException, IOException {
+        // 1. 获取系统剪贴板
+        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+        if (clipboard == null) {
+            throw new IllegalStateException("系统剪贴板不可用（可能无AWT环境）");
+        }
+
+        // 2. 获取剪贴板传输内容
+        Transferable transferable = clipboard.getContents(null);
+        if (transferable == null) {
+            return new ClipboardContent(ClipboardType.EMPTY, null); // 剪贴板为空
+        }
+
+        // 3. 识别剪贴板内容类型并读取
+        // 优先级：文件列表（复制/剪切的文件） > 文本 > 其他
+        if (transferable.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+            // 读取文件列表（复制/剪切的文件/文件夹）
+            @SuppressWarnings("unchecked")
+            List<File> fileList = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
+            return new ClipboardContent(ClipboardType.FILE_LIST, fileList);
+        } else if (transferable.isDataFlavorSupported(DataFlavor.stringFlavor)) {
+            // 读取文本内容
+            String text = (String) transferable.getTransferData(DataFlavor.stringFlavor);
+            return new ClipboardContent(ClipboardType.TEXT, text);
+        } else {
+            // 不支持的内容类型（如图片、音频等）
+            return new ClipboardContent(ClipboardType.UNSUPPORTED, null);
+        }
+    }
+
+    public enum ClipboardType {
+        EMPTY,        // 空剪贴板
+        TEXT,         // 文本内容
+        FILE_LIST,    // 文件/文件夹列表（复制/剪切的文件）
+        UNSUPPORTED   // 不支持的内容类型（图片、音频等）
+    }
+
+    public static class ClipboardContent {
+        private final ClipboardType type; // 内容类型
+        private final Object content;     // 具体内容（文本/String | 文件列表/List<File>）
+
+        public ClipboardContent(ClipboardType type, Object content) {
+            this.type = type;
+            this.content = content;
+        }
+
+        // 获取内容类型
+        public ClipboardType getType() {
+            return type;
+        }
+
+        // 获取文本内容（仅类型为TEXT时有效）
+        public String getText() {
+            if (type == ClipboardType.TEXT) {
+                return (String) content;
+            }
+            return null;
+        }
+
+        // 获取文件列表（仅类型为FILE_LIST时有效）
+        @SuppressWarnings("unchecked")
+        public List<File> getFileList() {
+            if (type == ClipboardType.FILE_LIST) {
+                return (List<File>) content;
+            }
+            return null;
+        }
+
+        // 便捷判断方法
+        public boolean isEmpty() {
+            return type == ClipboardType.EMPTY;
+        }
+
+        public boolean isText() {
+            return type == ClipboardType.TEXT;
+        }
+
+        public boolean isFileList() {
+            return type == ClipboardType.FILE_LIST;
+        }
+
+        public boolean isUnsupported() {
+            return type == ClipboardType.UNSUPPORTED;
+        }
+    }
+
 }

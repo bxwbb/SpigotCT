@@ -76,4 +76,9 @@ public class StartPage extends MiniWindow {
         getCenterPanel().setLayout(new BorderLayout());
     }
 
+    @Override
+    public void delete() {
+
+    }
+
 }

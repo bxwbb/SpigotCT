@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.DosFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.*;
@@ -28,6 +29,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 public class FileUtil {
 
@@ -568,6 +570,15 @@ public class FileUtil {
         return true;
     }
 
+    public static void createFile(Path path, String name) {
+        try {
+            FileUtil.createFoldersStepByStep(path.toString());
+            Files.createFile(path.resolve(name));
+        } catch (IOException e) {
+            log.error("文件创建时发生错误 -> ", e);
+        }
+    }
+
     /**
      * 校验文件夹名称是否合法（跨平台通用）
      */
@@ -753,8 +764,8 @@ public class FileUtil {
         }
 
         // 2. 弹出系统风格的确认对话框
-        String title = "确认删除";
-        String message = String.format("是否确认将「%s」移至回收站？", target.getName());
+        String title = FileUtil.getLang("tip.question");
+        String message = FileUtil.getLang("tip.delete", target.getName());
         // 弹窗选项：YES=确认，NO=取消，图标为警告型
         int confirmResult = JOptionPane.showConfirmDialog(
                 parent,          // 父组件（弹窗定位到该组件旁，传null则居中）
@@ -772,6 +783,134 @@ public class FileUtil {
             // 用户点击「取消」/ 关闭弹窗 → 返回false，不执行操作
             return false;
         }
+    }
+
+    /**
+     * 复制文件/文件夹（含子内容）到目标路径
+     * 复制文件夹时：先创建源文件夹本身，再复制内部内容（如A→B → B/A/内容）
+     *
+     * @param sourcePath 源路径A（文件/文件夹）
+     * @param destPath   目标路径B（文件夹/文件路径）
+     * @return 是否复制成功
+     * @throws IllegalArgumentException 路径为空/源路径不存在/参数非法时抛出
+     * @throws IOException              复制失败/权限不足/文件被占用时抛出
+     */
+    public static boolean copyFileOrDir(String sourcePath, String destPath) throws IllegalArgumentException, IOException {
+        // 1. 基础参数校验
+        if (sourcePath == null || sourcePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("源路径不能为空！");
+        }
+        if (destPath == null || destPath.trim().isEmpty()) {
+            throw new IllegalArgumentException("目标路径不能为空！");
+        }
+
+        Path source = Paths.get(sourcePath.trim()).toAbsolutePath().normalize();
+        Path dest = Paths.get(destPath.trim()).toAbsolutePath().normalize();
+
+        if (!Files.exists(source)) {
+            throw new IllegalArgumentException("源文件/文件夹不存在：" + sourcePath);
+        }
+
+        // ========== 防无限递归检测 ==========
+        if (Files.isDirectory(source) && Files.isDirectory(dest) && dest.startsWith(source)) {
+            throw new IllegalArgumentException("禁止将文件夹复制到自身的子目录中（会导致无限递归）：" +
+                    "源=" + source + "，目标=" + dest);
+        }
+
+        // 2. 区分文件/文件夹执行复制
+        if (Files.isRegularFile(source)) {
+            // 复制文件（逻辑不变）
+            copySingleFile(source, dest);
+        } else if (Files.isDirectory(source)) {
+            // ========== 关键修复：先拼接源文件夹名称到目标路径 ==========
+            // 最终目标文件夹 = 传入的目标路径 + 源文件夹名称（如 B + A → B/A）
+            Path finalDestDir = dest.resolve(source.getFileName());
+            // 复制文件夹（先创建A文件夹，再复制内部内容）
+            copyDirectory(source, finalDestDir);
+            // 更新dest为最终目标文件夹（用于结果校验）
+            dest = finalDestDir;
+        } else {
+            throw new IOException("不支持的文件类型：" + sourcePath);
+        }
+
+        // 3. 校验复制结果
+        return Files.exists(dest);
+    }
+
+    /**
+     * 辅助方法：复制单个文件（逻辑不变）
+     */
+    private static void copySingleFile(Path source, Path dest) throws IOException {
+        if (Files.isDirectory(dest)) {
+            dest = dest.resolve(source.getFileName());
+        }
+
+        Path parentDir = dest.getParent();
+        if (parentDir != null && !Files.exists(parentDir)) {
+            Files.createDirectories(parentDir);
+        }
+
+        Files.copy(
+                source,
+                dest,
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.COPY_ATTRIBUTES
+        );
+    }
+
+    /**
+     * 辅助方法：复制文件夹（先创建文件夹本身，再复制内部内容）
+     */
+    private static void copyDirectory(Path sourceDir, Path destDir) throws IOException {
+        // 1. 先创建源文件夹本身（核心：确保目标路径下有同名文件夹）
+        if (!Files.exists(destDir)) {
+            Files.createDirectories(destDir);
+        }
+
+        // 2. 遍历源文件夹内部内容，复制到目标文件夹
+        Files.walkFileTree(sourceDir, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                // 跳过源文件夹本身（只处理子目录）
+                if (Objects.equals(dir.normalize(), sourceDir.normalize())) {
+                    return FileVisitResult.CONTINUE;
+                }
+
+                // 跳过目标文件夹（防循环）
+                if (Objects.equals(dir.normalize(), destDir.normalize())) {
+                    return FileVisitResult.SKIP_SUBTREE;
+                }
+
+                // 构建子目录路径（如 sourceDir/sub → destDir/sub）
+                Path targetSubDir = destDir.resolve(sourceDir.relativize(dir));
+                if (!Files.exists(targetSubDir)) {
+                    Files.createDirectories(targetSubDir);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                // 复制文件到目标文件夹对应位置（如 sourceDir/file.txt → destDir/file.txt）
+                Path targetFile = destDir.resolve(sourceDir.relativize(file));
+                if (!Files.exists(targetFile.getParent())) {
+                    Files.createDirectories(targetFile.getParent());
+                }
+                Files.copy(
+                        file,
+                        targetFile,
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.COPY_ATTRIBUTES
+                );
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                System.err.println("跳过无法访问的文件：" + file + "，原因：" + exc.getMessage());
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
 }
