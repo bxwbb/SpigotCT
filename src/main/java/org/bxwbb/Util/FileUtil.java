@@ -7,25 +7,31 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.bxwbb.Main;
+import org.bxwbb.Util.Task.ControllableThreadPool;
+import org.bxwbb.Util.Task.ControllableThreadTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.nio.file.*;
+import java.nio.file.attribute.DosFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class FileUtil {
 
-    public static final ExecutorService FILE_IO_EXECUTOR;
+    public static final ControllableThreadPool FILE_IO_EXECUTOR;
     // 语言缓存键值对
     public final static Map<String, String> LANG_MAP = new java.util.HashMap<>();
     private static final Logger log = LoggerFactory.getLogger(FileUtil.class);
@@ -54,17 +60,13 @@ public class FileUtil {
     public static String ROOT_FOLDER_ICON;
 
     static {
-        FILE_IO_EXECUTOR = Executors.newFixedThreadPool(3, new ThreadFactory() {
-            private int threadCount = 0;
-
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread thread = new Thread(r, "FileOperation-Thread-" + (++threadCount));
-                thread.setDaemon(true);
-                thread.setUncaughtExceptionHandler((t, e) -> log.error("文件操作线程异常 -> ", e));
-                return thread;
-            }
-        });
+        FILE_IO_EXECUTOR = new ControllableThreadPool(
+                5,
+                20,
+                30L,
+                TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<>(1000)
+        );
     }
 
     public static void shutdown() {
@@ -363,28 +365,37 @@ public class FileUtil {
     /**
      * 异步递归统计文件夹内所有文件数量（包含子文件夹及子文件夹内的所有文件）
      * 操作在FILE_IO_EXECUTOR线程池中执行，避免阻塞主线程
-     * @param file 要统计的文件/文件夹对象
+     *
+     * @param file     要统计的文件/文件夹对象
      * @param callback 统计完成后的回调（结果通过回调返回）
      */
-    public static void countAllFilesAsync(File file, CountFileCallback callback) {
+    public static String countAllFilesAsync(File file, CountFileCallback callback) {
         // 空回调防护
-        CountFileCallback safeCallback = callback == null ? (count) -> {} : callback;
+        CountFileCallback safeCallback = callback == null ? (count) -> {
+        } : callback;
+
+        ControllableThreadTask<Void> task = new ControllableThreadTask<>() {
+            @Override
+            protected Void doWork() {
+                int result = countAllFilesSync(file);
+                // 执行回调（如需在Swing UI线程执行回调，可添加SwingUtilities.invokeLater）
+                safeCallback.onCountCompleted(result);
+                return null;
+            }
+        };
 
         // 提交任务到文件IO线程池
-        FILE_IO_EXECUTOR.submit(() -> {
-            int result = countAllFilesSync(file);
-            // 执行回调（如需在Swing UI线程执行回调，可添加SwingUtilities.invokeLater）
-            safeCallback.onCountCompleted(result);
-        });
+        return FILE_IO_EXECUTOR.submit(task);
     }
 
     /**
      * 同步版本：递归统计文件夹内所有文件数量（核心逻辑，供异步方法调用）
+     *
      * @param file 要统计的文件/文件夹对象
      * @return 统计结果：
-     *         - 0：空文件夹（无任何文件/子文件夹）
-     *         - >0：文件夹内的总文件数量（包含所有层级子文件）
-     *         - -1：file不是文件夹/不存在/无法访问/权限不足等异常情况
+     * - 0：空文件夹（无任何文件/子文件夹）
+     * - >0：文件夹内的总文件数量（包含所有层级子文件）
+     * - -1：file不是文件夹/不存在/无法访问/权限不足等异常情况
      */
     public static int countAllFilesSync(File file) {
         // 1. 基础校验：文件不存在/不是文件夹 → 返回-1
@@ -405,6 +416,7 @@ public class FileUtil {
 
     /**
      * 递归统计指定文件夹下的所有文件数量（修复漏统计、异常处理问题）
+     *
      * @param folder 目标文件夹
      * @return 文件夹下所有文件的总数（仅统计文件，不含目录）
      */
@@ -456,9 +468,310 @@ public class FileUtil {
     public interface CountFileCallback {
         /**
          * 统计完成回调
+         *
          * @param count 统计结果（0=空文件夹，>0=文件总数，-1=异常）
          */
         void onCountCompleted(int count);
+    }
+
+    /**
+     * 单位转换
+     *
+     * @param bytes 字节数
+     * @return 转换后的字符串
+     */
+    public static String formatFileSize(long bytes) {
+        if (bytes <= 0) return "0 B";
+        final String[] units = {"B", "KB", "MB", "GB", "TB"};
+        int digitGroups = (int) (Math.log10(bytes) / Math.log10(1024));
+        return String.format("%.2f %s",
+                bytes / Math.pow(1024, digitGroups),
+                units[digitGroups]);
+    }
+
+    /**
+     * 根据路径获取图片Icon
+     *
+     * @param path   图片路径
+     * @param width  图片宽度
+     * @param height 图片高度
+     * @return 图片Icon
+     */
+    public static ImageIcon getImageIconToPath(String path, int width, int height) {
+        return new ImageIcon(new ImageIcon(path).getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
+    }
+
+    /**
+     * 根据路径获取图片Icon
+     *
+     * @param path 图片路径
+     * @return 图片Icon
+     */
+    public static ImageIcon getImageIconToPath(String path) {
+        return getImageIconToPath(path, 20, 20);
+    }
+
+    /**
+     * 逐级创建文件夹：从路径顶级节点开始，依次检查/创建每一级目录
+     * 特性：仅输出错误日志（SLF4J），无成功/过程日志，极简且符合生产级日志规范
+     *
+     * @param fullPath 要创建的完整文件夹路径（支持Windows/Linux/Mac）
+     * @return true=创建成功（或路径已存在），false=创建失败
+     */
+    public static boolean createFoldersStepByStep(String fullPath) {
+        // 初始化SLF4J Logger（建议放到类级别，此处为完整独立方法）
+        Logger log = LoggerFactory.getLogger(FileUtil.class); // 替换为你的实际类名
+
+        // 1. 空路径/空白路径防护（仅输出错误日志）
+        if (fullPath == null || fullPath.trim().isEmpty()) {
+            log.error("创建文件夹失败 - 传入路径为空");
+            return false;
+        }
+
+        // 2. 标准化路径 + 根节点校验
+        Path standardPath = Paths.get(fullPath).normalize();
+        Path rootPath = standardPath.getRoot();
+        if (rootPath == null) {
+            log.error("创建文件夹失败 - 无法识别路径的根节点 - {}", fullPath);
+            return false;
+        }
+
+        // 3. 初始化当前遍历路径（根节点）
+        File currentDir = rootPath.toFile();
+        Path relativePath = rootPath.relativize(standardPath);
+        int pathCount = relativePath.getNameCount();
+
+        // 4. 逐级遍历创建
+        for (int i = 0; i < pathCount; i++) {
+            String currentNode = relativePath.getName(i).toString();
+            currentDir = new File(currentDir, currentNode);
+
+            if (currentDir.exists()) {
+                // 存在但不是文件夹（冲突）→ 输出错误日志
+                if (!currentDir.isDirectory()) {
+                    log.error("创建文件夹失败 - 路径冲突（存在同名文件） - {}", currentDir.getAbsolutePath());
+                    return false;
+                }
+                // 存在且是文件夹 → 无日志，直接进入下一级
+            } else {
+                // 不存在 → 尝试创建，失败则输出错误日志
+                boolean created = currentDir.mkdir();
+                if (!created) {
+                    log.error("创建文件夹失败 - 无法创建层级 - {}", currentDir.getAbsolutePath());
+                    return false;
+                }
+                // 创建成功 → 无日志
+            }
+        }
+
+        // 所有层级处理完成 → 无日志，直接返回成功
+        return true;
+    }
+
+    /**
+     * 校验文件夹名称是否合法（跨平台通用）
+     */
+    public static boolean isValidFolderName(String name) {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
+        // 不能以 . 或 空格 开头/结尾
+        if (name.startsWith(".") || name.startsWith(" ")
+                || name.endsWith(" ")) {
+            return false;
+        }
+        // 禁止的非法字符
+        if (name.matches(".*[\\\\/:*?\"<>|].*")) {
+            return false;
+        }
+        // 长度限制
+        return name.length() <= 255;
+    }
+
+    /**
+     * 【单方法】跨平台设置文件/文件夹隐藏/取消隐藏
+     * 支持 Windows/Linux/macOS，无需额外调用其他方法
+     *
+     * @param path   目标文件/文件夹路径（如 D:/test.txt、/home/user/test）
+     * @param hidden true=隐藏，false=取消隐藏
+     * @return 操作是否成功
+     * @throws IllegalArgumentException 路径为空/不存在时抛出
+     * @throws IOException              权限不足/操作失败时抛出
+     */
+    public static boolean setFileHidden(String path, boolean hidden) throws IllegalArgumentException, IOException {
+        // ========== 1. 基础参数校验 ==========
+        if (path == null || path.trim().isEmpty()) {
+            throw new IllegalArgumentException("文件路径不能为空！");
+        }
+        File target = new File(path.trim());
+        if (!target.exists()) {
+            throw new IllegalArgumentException("目标文件/文件夹不存在：" + path);
+        }
+        Path targetPath = target.toPath();
+        String osName = System.getProperty("os.name").toLowerCase();
+
+        if (osName.contains("win")) {
+            DosFileAttributeView dosView = Files.getFileAttributeView(targetPath, DosFileAttributeView.class);
+            if (dosView == null) {
+                throw new IOException("当前 Windows 系统不支持 DOS 文件属性操作");
+            }
+            dosView.setHidden(hidden);
+            return dosView.readAttributes().isHidden() == hidden;
+        } else if (osName.contains("linux") || osName.contains("mac") || osName.contains("unix")) {
+            String parentPath = target.getParent() == null ? "." : target.getParent();
+            String originalName = target.getName();
+
+            // 隐藏逻辑：添加 . 前缀 + 最小权限
+            if (hidden) {
+                if (!originalName.startsWith(".")) {
+                    String hiddenName = "." + originalName;
+                    File hiddenFile = new File(parentPath, hiddenName);
+                    if (hiddenFile.exists()) Files.deleteIfExists(hiddenFile.toPath());
+                    if (!target.renameTo(hiddenFile)) {
+                        throw new IOException("重命名失败，无法隐藏：" + path);
+                    }
+                    // 设置最小权限（仅所有者可读）
+                    Set<PosixFilePermission> minPerms = new HashSet<>();
+                    minPerms.add(PosixFilePermission.OWNER_READ);
+                    if (hiddenFile.isDirectory()) minPerms.add(PosixFilePermission.OWNER_EXECUTE);
+                    Files.setPosixFilePermissions(hiddenFile.toPath(), minPerms);
+                } else {
+                    // 已隐藏，仅更新权限
+                    Set<PosixFilePermission> minPerms = new HashSet<>();
+                    minPerms.add(PosixFilePermission.OWNER_READ);
+                    if (target.isDirectory()) minPerms.add(PosixFilePermission.OWNER_EXECUTE);
+                    Files.setPosixFilePermissions(targetPath, minPerms);
+                }
+            } else {
+                if (originalName.startsWith(".")) {
+                    String showName = originalName.substring(1);
+                    File showFile = new File(parentPath, showName);
+                    if (showFile.exists()) Files.deleteIfExists(showFile.toPath());
+                    if (!target.renameTo(showFile)) {
+                        throw new IOException("重命名失败，无法取消隐藏：" + path);
+                    }
+                    // 恢复默认权限
+                    Set<PosixFilePermission> defaultPerms = new HashSet<>();
+                    defaultPerms.add(PosixFilePermission.OWNER_READ);
+                    defaultPerms.add(PosixFilePermission.OWNER_WRITE);
+                    defaultPerms.add(PosixFilePermission.OWNER_EXECUTE);
+                    defaultPerms.add(PosixFilePermission.GROUP_READ);
+                    defaultPerms.add(PosixFilePermission.GROUP_EXECUTE);
+                    defaultPerms.add(PosixFilePermission.OTHERS_READ);
+                    defaultPerms.add(PosixFilePermission.OTHERS_EXECUTE);
+                    Files.setPosixFilePermissions(showFile.toPath(), defaultPerms);
+                } else {
+                    // 已显示，仅恢复权限
+                    Set<PosixFilePermission> defaultPerms = new HashSet<>();
+                    defaultPerms.add(PosixFilePermission.OWNER_READ);
+                    defaultPerms.add(PosixFilePermission.OWNER_WRITE);
+                    defaultPerms.add(PosixFilePermission.OWNER_EXECUTE);
+                    defaultPerms.add(PosixFilePermission.GROUP_READ);
+                    defaultPerms.add(PosixFilePermission.GROUP_EXECUTE);
+                    defaultPerms.add(PosixFilePermission.OTHERS_READ);
+                    defaultPerms.add(PosixFilePermission.OTHERS_EXECUTE);
+                    Files.setPosixFilePermissions(targetPath, defaultPerms);
+                }
+            }
+            return true;
+        } else {
+            if (hidden) {
+                // 仅设置最小权限
+                Set<PosixFilePermission> minPerms = new HashSet<>();
+                minPerms.add(PosixFilePermission.OWNER_READ);
+                if (target.isDirectory()) minPerms.add(PosixFilePermission.OWNER_EXECUTE);
+                Files.setPosixFilePermissions(targetPath, minPerms);
+            } else {
+                // 恢复默认权限
+                Set<PosixFilePermission> defaultPerms = new HashSet<>();
+                defaultPerms.add(PosixFilePermission.OWNER_READ);
+                defaultPerms.add(PosixFilePermission.OWNER_WRITE);
+                defaultPerms.add(PosixFilePermission.OWNER_EXECUTE);
+                defaultPerms.add(PosixFilePermission.GROUP_READ);
+                defaultPerms.add(PosixFilePermission.GROUP_EXECUTE);
+                defaultPerms.add(PosixFilePermission.OTHERS_READ);
+                defaultPerms.add(PosixFilePermission.OTHERS_EXECUTE);
+                Files.setPosixFilePermissions(targetPath, defaultPerms);
+            }
+            return true;
+        }
+    }
+
+    /**
+     * 将文件/文件夹移至系统回收站（废纸篓）
+     *
+     * @param path 目标文件/文件夹路径
+     * @return 操作是否成功
+     * @throws IllegalArgumentException 路径为空/不存在时抛出
+     * @throws IOException              系统命令执行失败/权限不足时抛出
+     */
+    private static boolean moveToRecycleBin(String path) throws IOException {
+        File target = new File(path);
+        String absolutePath = target.getAbsolutePath();
+        String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
+
+        if (!target.exists()) {
+            throw new IOException("目标文件/文件夹不存在 - " + absolutePath);
+        }
+
+        if (os.contains("win")) {
+            if (Desktop.isDesktopSupported()) {
+                try {
+                    return Desktop.getDesktop().moveToTrash(target);
+                } catch (Exception e) {
+                    log.error("移动文件夹到回收站失败 ->", e);
+                    return false;
+                }
+            } else {
+                log.error("系统不支持此功能，根据设置不执行强制删除");
+                return false;
+            }
+        } else if (os.contains("mac") || os.contains("linux")) {
+            return !target.exists();
+        } else {
+            throw new IOException("不支持的操作系统：" + os);
+        }
+    }
+
+    /**
+     * 弹出确认框后，将文件/文件夹移至系统回收站
+     *
+     * @param path   目标文件/文件夹路径
+     * @param parent 弹窗父组件（用于定位弹窗，传null则居中显示）
+     * @return 操作是否成功（取消返回false，确认后执行成功返回true，失败抛异常）
+     * @throws IllegalArgumentException 路径为空/不存在时抛出
+     * @throws IOException              系统命令执行失败/权限不足时抛出
+     */
+    public static boolean deleteWithConfirm(String path, Component parent) throws IllegalArgumentException, IOException {
+        // 1. 基础参数校验（提前校验，避免无效弹窗）
+        if (path == null || path.trim().isEmpty()) {
+            throw new IllegalArgumentException("文件路径不能为空！");
+        }
+        File target = new File(path.trim());
+        if (!target.exists()) {
+            throw new IllegalArgumentException("目标文件/文件夹不存在：" + path);
+        }
+
+        // 2. 弹出系统风格的确认对话框
+        String title = "确认删除";
+        String message = String.format("是否确认将「%s」移至回收站？", target.getName());
+        // 弹窗选项：YES=确认，NO=取消，图标为警告型
+        int confirmResult = JOptionPane.showConfirmDialog(
+                parent,          // 父组件（弹窗定位到该组件旁，传null则居中）
+                message,         // 提示信息
+                title,           // 弹窗标题
+                JOptionPane.YES_NO_OPTION, // 按钮类型：确认/取消
+                JOptionPane.WARNING_MESSAGE // 图标类型：警告
+        );
+
+        // 3. 根据用户选择执行操作
+        if (confirmResult == JOptionPane.YES_OPTION) {
+            // 用户点击「确认」→ 调用回收站删除方法
+            return moveToRecycleBin(path);
+        } else {
+            // 用户点击「取消」/ 关闭弹窗 → 返回false，不执行操作
+            return false;
+        }
     }
 
 }

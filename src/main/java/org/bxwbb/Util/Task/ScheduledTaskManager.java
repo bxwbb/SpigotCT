@@ -1,10 +1,11 @@
-package org.bxwbb.Util;
+package org.bxwbb.Util.Task;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
+import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.*;
@@ -79,36 +80,67 @@ public class ScheduledTaskManager {
     // ===================== 核心工具方法：指数型延迟计算 =====================
     /**
      * 检测当前程序繁忙度（0.0~1.0），用于动态调整延迟
-     * 核心逻辑：基于FileUtil的FILE_IO_EXECUTOR线程池繁忙度 + JVM系统负载
-     * @return 繁忙度（0=完全空闲，1=极度繁忙）
+     * 核心逻辑：仅基于【JVM进程CPU使用率】+【系统负载】计算，跨平台兼容Linux/Mac/Windows
+     * 优先级：进程CPU使用率 > 系统负载（进程CPU更精准反映当前程序繁忙度）
+     * @return 繁忙度（0=完全空闲，1=极度繁忙，异常兜底返回0.2）
      */
     private double getSystemBusyLevel() {
+        // 日志实例（复用当前类日志）
+        final Logger log = LoggerFactory.getLogger(this.getClass());
+        // 兜底默认值：低繁忙度，避免异常导致动态延迟逻辑失效
+        double finalBusyLevel = 0.2;
+
         try {
-            // 1. 获取FileUtil的FILE_IO_EXECUTOR线程池繁忙度（核心依据）
-            int activeThreads = 0;
-            int coreThreads = 0;
-            if (FileUtil.FILE_IO_EXECUTOR instanceof ThreadPoolExecutor executor) {
-                activeThreads = executor.getActiveCount();
-                coreThreads = executor.getCorePoolSize();
-            }
-            double executorBusy = coreThreads > 0 ? (double) activeThreads / coreThreads : 0.0;
-
-            // 2. 获取JVM系统负载（辅助依据，避免单一线程池误判）
+            // 1. 初始化核心指标
             OperatingSystemMXBean osBean = ManagementFactory.getOperatingSystemMXBean();
-            double systemLoad = osBean.getSystemLoadAverage();
-            // 系统负载归一化（假设CPU核心数为N，负载/N=0~1）
-            int cpuCores = Runtime.getRuntime().availableProcessors();
-            double normalizedSystemLoad = cpuCores > 0 ? Math.min(systemLoad / cpuCores, 1.0) : 0.0;
+            int cpuCoreNum = Runtime.getRuntime().availableProcessors(); // CPU核心数
+            double processCpuLoad; // 当前JVM进程CPU使用率（0~1，优先使用）
+            double systemLoadNormalized; // 系统负载归一化值（0~1，兜底使用）
 
-            // 3. 综合繁忙度（线程池繁忙度权重70% + 系统负载权重30%）
-            double busyLevel = (executorBusy * 0.7) + (normalizedSystemLoad * 0.3);
-            // 确保值在0~1之间
-            return Math.max(0.0, Math.min(1.0, busyLevel));
+            // 2. 反射获取JVM进程CPU使用率（跨平台核心，兼容Linux/Mac/Windows）
+            // com.sun.management.OperatingSystemMXBean 为JDK通用内部API，主流JDK均支持
+            try {
+                Class<?> sunOsBeanClz = Class.forName("com.sun.management.OperatingSystemMXBean");
+                // 获取进程CPU使用率方法（返回值0.0~1.0，精准反映当前程序的CPU占用）
+                Method getProcessCpuLoadMethod = sunOsBeanClz.getMethod("getProcessCpuLoad");
+                // 强转并调用方法
+                processCpuLoad = (double) getProcessCpuLoadMethod.invoke(osBean);
+                // 边界校验：确保值在0~1之间（避免JVM返回异常值）
+                processCpuLoad = Math.max(0.0, Math.min(1.0, processCpuLoad));
+            } catch (Exception e) {
+                // 异常兜底（极少数JDK不兼容场景）
+                log.warn("反射获取进程CPU使用率失败（兼容兜底），原因：{}", e.getMessage());
+                processCpuLoad = 0.0;
+            }
+
+            // 3. 计算系统负载归一化值（Linux/Mac有效，Windows返回-1，做兜底处理）
+            double systemLoadAverage = osBean.getSystemLoadAverage();
+            if (systemLoadAverage > 0) {
+                // 系统负载归一化：系统负载 / CPU核心数，确保值在0~1之间
+                systemLoadNormalized = Math.min(systemLoadAverage / cpuCoreNum, 1.0);
+                systemLoadNormalized = Math.max(0.0, systemLoadNormalized);
+            } else {
+                systemLoadNormalized = 0.0;
+            }
+
+            // 4. 综合计算繁忙度（核心权重分配：进程CPU使用率70% + 系统负载30%）
+            // 优先级：进程CPU使用率（精准反映当前程序）> 系统负载（反映整个系统）
+            if (processCpuLoad > 0) {
+                finalBusyLevel = (processCpuLoad * 0.7) + (systemLoadNormalized * 0.3);
+            } else {
+                // 进程CPU获取失败：直接使用系统负载作为繁忙度
+                finalBusyLevel = systemLoadNormalized;
+            }
+
+            // 最终边界校验：确保繁忙度严格在0~1之间
+            finalBusyLevel = Math.max(0.0, Math.min(1.0, finalBusyLevel));
 
         } catch (Exception e) {
-            log.warn("检测系统繁忙度失败，默认返回低繁忙度（0.2）", e);
-            return 0.2; // 异常时默认低繁忙度
+            // 全局异常兜底：任何错误都返回默认低繁忙度，保证上层逻辑不中断
+            log.warn("检测系统繁忙度发生全局异常，使用默认值0.2，原因：{}", e.getMessage(), e);
         }
+
+        return finalBusyLevel;
     }
 
     /**
@@ -189,8 +221,6 @@ public class ScheduledTaskManager {
         wrapper.future = future;
         taskMap.put(taskId, wrapper);
 
-        log.info("固定间隔任务已启动（任务ID：{}），初始延迟{}毫秒，间隔{}毫秒执行",
-                taskId, initialDelayMillis, intervalMillis);
         return taskId;
     }
 
@@ -279,7 +309,6 @@ public class ScheduledTaskManager {
         boolean isCancelled = (wrapper.future != null) && wrapper.future.cancel(false); // 允许当前任务执行完成
         if (isCancelled) {
             taskMap.remove(taskId);
-            log.info("定时任务已停止（任务ID：{}）", taskId);
         } else {
             log.warn("停止定时任务失败：任务已完成/已停止（任务ID：{}）", taskId);
         }

@@ -1,22 +1,17 @@
 package org.bxwbb.WorkEventer;
 
+import org.bxwbb.UI.ArrowedTipWindow;
 import org.bxwbb.Util.FileUtil;
 
 import javax.swing.*;
 
-public class ShowButton {
-
-    protected final JButton showButton;
+public class ShowButton extends JButton {
 
     private int workCount = 0;
 
     protected ShowButton() {
-        showButton = new JButton(FileUtil.getLang("worker.tip.worked"));
-        showButton.setVisible(false);
-    }
-
-    public JButton getShowButton() {
-        return showButton;
+        super(FileUtil.getLang("worker.tip.worked"));
+        this.setVisible(false);
     }
 
     public int getWorkCount() {
@@ -34,11 +29,12 @@ public class ShowButton {
     public void setWorkCount(int workCount) {
         this.workCount = workCount;
         if (workCount == 0) {
-            showButton.setText(FileUtil.getLang("worker.tip.worked"));
-            showButton.setVisible(false);
+            this.setText(FileUtil.getLang("worker.tip.worked"));
+            this.setVisible(false);
         } else {
-            showButton.setText(FileUtil.getLang("worker.tip.working", String.valueOf(workCount)));
-            showButton.setVisible(true);
+            this.setText(FileUtil.getLang("worker.tip.working", String.valueOf(workCount)));
+            this.setVisible(true);
+            ArrowedTipWindow.info(this, FileUtil.getLang("worker.tip.add"));
         }
     }
 }

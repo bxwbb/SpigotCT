@@ -2,9 +2,9 @@ package org.bxwbb.WorkEventer;
 
 import org.bxwbb.UI.IndicatorStatus;
 import org.bxwbb.UI.MissionTip;
-import org.bxwbb.Util.ScheduledTaskManager;
+import org.bxwbb.Util.Task.ScheduledTaskManager;
 
-public abstract class Work implements MissionTip.OperationCallback {
+public class Work {
 
     private String name;
     private int value = 0;
@@ -13,6 +13,7 @@ public abstract class Work implements MissionTip.OperationCallback {
     protected MissionTip missionTip;
     private WorkUpdateCallBack workUpdateCallBack;
     private final String updateTaskID;
+    protected MissionTip.OperationCallback operationCallback;
 
     public Work(String name) {
         this.name = name;
@@ -79,6 +80,10 @@ public abstract class Work implements MissionTip.OperationCallback {
 
     protected void delete() {
         ScheduledTaskManager.getInstance().stopTask(updateTaskID);
+    }
+
+    public void setOperationCallback(MissionTip.OperationCallback callback) {
+        operationCallback = callback;
     }
 
     @FunctionalInterface

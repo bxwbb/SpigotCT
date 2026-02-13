@@ -1,5 +1,6 @@
 package org.bxwbb.WorkEventer;
 
+import org.bxwbb.UI.ArrowedTipWindow;
 import org.bxwbb.UI.MissionTip;
 import org.bxwbb.Util.FileUtil;
 
@@ -32,7 +33,7 @@ public class WorkController {
         jFrame.setSize(600, 300);
         jFrame.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
 
-        showButton.showButton.addActionListener(e -> {
+        showButton.addActionListener(e -> {
             jFrame.setVisible(true);
             jFrame.setLocationRelativeTo(null);
         });
@@ -51,6 +52,9 @@ public class WorkController {
         missionTip.setIndicatorStatus(work.getStatus());
 
         work.missionTip = missionTip;
+        if (work.operationCallback != null) {
+            missionTip.setOperationCallback(work.operationCallback);
+        }
 
         scrollContentPanel.add(missionTip);
         scrollContentPanel.add(Box.createVerticalStrut(8));

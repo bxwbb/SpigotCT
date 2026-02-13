@@ -2,10 +2,15 @@ package org.bxwbb.MiniWindow;
 
 import org.bxwbb.Main;
 import org.bxwbb.Setting;
+import org.bxwbb.Swing.CreateFolder;
 import org.bxwbb.UI.IndicatorStatus;
+import org.bxwbb.UI.MissionTip;
 import org.bxwbb.UI.RoundLabel;
+import org.bxwbb.Util.ClipboardUtil;
 import org.bxwbb.Util.FileUtil;
 import org.bxwbb.Util.JTreeExpandCollapseUtil;
+import org.bxwbb.Util.PathInfoFormatter;
+import org.bxwbb.Util.Task.ControllableThreadTask;
 import org.bxwbb.WorkEventer.Work;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +25,11 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileOwnerAttributeView;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,9 +43,13 @@ public class FileManager extends MiniWindow {
     // 询问用户文件数最低值
     private static final int MIN_FILE_COUNT = 10000;
 
+    private File rootFile;
+
     public FileManager() {
         super(FileManager.class);
     }
+
+    FileManager self = this;
 
     @Override
     public void init() {
@@ -46,8 +60,8 @@ public class FileManager extends MiniWindow {
             @Override
             public void actionPerformed(ActionEvent actionEvent) {
                 Component parent = getCenterPanel();
-                File selectedFolder = FileUtil.chooseSingleFolder(parent, FileUtil.getLang("miniWindow.fileManager.selectFile"));
-                if (selectedFolder == null) {
+                rootFile = FileUtil.chooseSingleFolder(parent, FileUtil.getLang("miniWindow.fileManager.selectFile"));
+                if (rootFile == null) {
                     return;
                 }
 
@@ -57,7 +71,7 @@ public class FileManager extends MiniWindow {
                     centerPanel.revalidate();
                     centerPanel.repaint();
 
-                    DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode(new FileData(selectedFolder));
+                    DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode(new FileData(rootFile));
                     DefaultTreeModel newTreeModel = new DefaultTreeModel(rootNode);
 
                     JTree newFileTree = new JTree(newTreeModel);
@@ -125,7 +139,13 @@ public class FileManager extends MiniWindow {
 
                 } catch (Exception e) {
                     log.error("加载文件目录树失败", e);
-                    JOptionPane.showMessageDialog(parent, FileUtil.getLang("tip.file.load.failed") + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(
+                            parent,
+                            FileUtil.getLang("tip.file.load.failed") + e.getMessage(),
+                            "错误",
+                            JOptionPane.ERROR_MESSAGE,
+                            self.getIcon()
+                    );
                 }
             }
         });
@@ -148,41 +168,125 @@ public class FileManager extends MiniWindow {
 
     private void createPopMenu(JPopupMenu popupMenu, DefaultMutableTreeNode selectedNode, DefaultTreeModel currentModel, JTree tree) {
         if (selectedNode.getUserObject() instanceof FileData(File file)) {
+            JMenu createNew = new JMenu(FileUtil.getLang("miniWindow.fileManager.popMenu.create"));
+            JMenuItem createFolder = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.create.folder"),
+                    FileUtil.getImageIconToPath(Objects.requireNonNull(FileUtil.loadFile(FileUtil.DEFAULT_FOLDER_ICON[1])).getPath()));
+            createFolder.addActionListener(event -> {
+                File pFile;
+                if (file.isDirectory()) {
+                    pFile = file;
+                } else if (file.isFile()) {
+                    pFile = file.getParentFile();
+                } else {
+                    log.error("在获取点击文件夹时发生未知错误");
+                    return;
+                }
+                CreateFolder dialog = new CreateFolder(pFile.toPath());
+                dialog.setSize(600, 200);
+                dialog.setLocationRelativeTo(null);
+                dialog.setVisible(true);
+            });
+            createNew.add(createFolder);
+            popupMenu.add(createNew);
+            popupMenu.addSeparator();
             JMenuItem openOnOutside = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.openFileOnOutside"));
             openOnOutside.addActionListener(event -> {
                 try {
                     FileUtil.openFile(file);
                 } catch (IOException e) {
-                    JOptionPane.showMessageDialog(null, FileUtil.getLang("miniWindow.fileManager.popMenu.openFileOnOutside.warring", file.getPath(), e.getMessage()), FileUtil.getLang("miniWindow.fileManager.popMenu.openFileOnOutside.warringTitle"), JOptionPane.WARNING_MESSAGE);
+                    JOptionPane.showMessageDialog(
+                            null,
+                            FileUtil.getLang("miniWindow.fileManager.popMenu.openFileOnOutside.warring", file.getPath(), e.getMessage()),
+                            FileUtil.getLang("miniWindow.fileManager.popMenu.openFileOnOutside.warringTitle"),
+                            JOptionPane.WARNING_MESSAGE,
+                            self.getIcon()
+                    );
                     log.error("打开文件失败 -> ", e);
                 }
             });
             popupMenu.add(openOnOutside);
+            JMenuItem coptFile = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copyFile"));
+            coptFile.addActionListener((e) -> {
+                boolean ret = ClipboardUtil.copyFileToClipboard(file);
+                if (!ret) {
+                    JOptionPane.showMessageDialog(
+                            null,
+                            FileUtil.getLang("miniWindow.fileManager.popMenu.copyFile.fail", file.getPath()),
+                            FileUtil.getLang("tip.error"),
+                            JOptionPane.ERROR_MESSAGE,
+                            self.getIcon()
+                    );
+                }
+            });
+            popupMenu.add(coptFile);
+            JMenu copyFileOther = new JMenu(FileUtil.getLang("miniWindow.fileManager.popMenu.copy"));
+            JMenuItem copyFilePath = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.path"));
+            copyFilePath.addActionListener(e -> ClipboardUtil.copyTextToClipboard(file.getPath()));
+            copyFileOther.add(copyFilePath);
+            JMenuItem copyFileName = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.name"));
+            copyFileName.addActionListener(e -> ClipboardUtil.copyTextToClipboard(file.getName()));
+            copyFileOther.add(copyFileName);
+            popupMenu.add(copyFileOther);
+            JMenuItem copyLocalFilePath = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.loaclPath"));
+            copyLocalFilePath.addActionListener(e -> ClipboardUtil.copyTextToClipboard(rootFile.toPath().relativize(file.toPath()).toString()));
+            copyFileOther.add(copyLocalFilePath);
+            copyFileOther.addSeparator();
+            JMenuItem copyFileSize = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.size"));
+            try {
+                BasicFileAttributes attrs = Files.readAttributes(file.toPath(), BasicFileAttributes.class);
+                copyFileSize.addActionListener(e -> ClipboardUtil.copyTextToClipboard(FileUtil.formatFileSize(attrs.size())));
+                copyFileOther.add(copyFileSize);
+                JMenuItem copyFileCreaterTime = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.createTime"));
+                copyFileCreaterTime.addActionListener(e -> ClipboardUtil.copyTextToClipboard(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                        .format(new Date(attrs.creationTime().toMillis()))));
+                copyFileOther.add(copyFileCreaterTime);
+                JMenuItem copyLastModifiedTime = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.lastModifiedTime"));
+                copyLastModifiedTime.addActionListener(e -> ClipboardUtil.copyTextToClipboard(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                        .format(new Date(attrs.lastModifiedTime().toMillis()))));
+                copyFileOther.add(copyLastModifiedTime);
+                JMenuItem copyLastAccessTime = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.lastAccessTime"));
+                copyLastAccessTime.addActionListener(e -> ClipboardUtil.copyTextToClipboard(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+                        .format(new Date(attrs.lastAccessTime().toMillis()))));
+                copyFileOther.add(copyLastAccessTime);
+                JMenuItem copyFileOwner = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.owner"));
+                copyFileOwner.addActionListener(e -> {
+                    try {
+                        ClipboardUtil.copyTextToClipboard(Files.getFileAttributeView(file.toPath(), FileOwnerAttributeView.class)
+                                .getOwner().getName());
+                    } catch (IOException ex) {
+                        log.error("获取文件拥有者时发生错误 - {} -> ", file.getPath(), ex);
+                    }
+                });
+                copyFileOther.add(copyFileOwner);
+                JMenuItem copyFileAll = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.all"));
+                copyFileAll.addActionListener(e -> {
+                    ClipboardUtil.copyTextToClipboard(PathInfoFormatter.getFormattedPathInfo(file.toPath()));
+                });
+                copyFileOther.add(copyFileAll);
+            } catch (IOException e) {
+                log.error("读取文件时发生错误 - {} -> ", file.getPath(), e);
+            }
+            JMenuItem deleteFile = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.delete"));
+            deleteFile.addActionListener(e -> {
+                try {
+                    if (!FileUtil.deleteWithConfirm(file.getPath(), null)) {
+                        log.error("删除文件时发生错误 - {}", file.getPath());
+                    }
+                } catch (IOException ex) {
+                    log.error("删除文件时发生错误 - {} -> ", file.getPath(), ex);
+                }
+            });
+            popupMenu.add(deleteFile);
             popupMenu.addSeparator();
             JMenuItem refresh = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.refresh"));
             refresh.addActionListener(e -> refreshTree(selectedNode, currentModel));
             popupMenu.add(refresh);
             JMenuItem expand = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.expand"));
             expand.addActionListener(e -> {
-                Work worker = new Work(FileUtil.getLang("miniWindow.fileManager.loadAll.workerName", "?", "正在统计")) {
-                    @Override
-                    public boolean onPause() {
-                        return false;
-                    }
-
-                    @Override
-                    public boolean onResume() {
-                        return false;
-                    }
-
-                    @Override
-                    public boolean onStop() {
-                        return false;
-                    }
-                };
+                Work worker = new Work(FileUtil.getLang("miniWindow.fileManager.loadAll.workerName", "?", "正在统计"));
                 worker.setStatus(IndicatorStatus.WAITING_OTHER);
                 Main.getWorkController().addWork(worker);
-                FileUtil.countAllFilesAsync(file, (count) -> {
+                String taskID = FileUtil.countAllFilesAsync(file, (count) -> {
                     worker.setMaxValue(count);
                     worker.setValue(0);
                     worker.setStatus(IndicatorStatus.RUNNING);
@@ -208,6 +312,24 @@ public class FileManager extends MiniWindow {
                         Main.getWorkController().removeWork(worker);
                         loadingCount.set(0);
                     });
+                });
+                worker.setOperationCallback(new MissionTip.OperationCallback() {
+                    @Override
+                    public boolean onPause() {
+                        return FileUtil.FILE_IO_EXECUTOR.pauseTask(taskID);
+                    }
+
+                    @Override
+                    public boolean onResume() {
+                        return FileUtil.FILE_IO_EXECUTOR.resumeTask(taskID);
+                    }
+
+                    @Override
+                    public boolean onStop() {
+                        boolean cancel = FileUtil.FILE_IO_EXECUTOR.cancelTask(taskID);
+                        if (cancel) Main.getWorkController().removeWork(worker);
+                        return cancel;
+                    }
                 });
             });
             expand.setEnabled(loadingCount.get() <= 0);
@@ -265,43 +387,49 @@ public class FileManager extends MiniWindow {
         }
         SwingUtilities.invokeLater(() -> currentModel.reload(node));
 
-        FileUtil.FILE_IO_EXECUTOR.submit(() -> {
-            try {
-                List<File> files = FileUtil.listFilesOnce(file);
+        ControllableThreadTask<Void> task = new ControllableThreadTask<>() {
+            @Override
+            protected Void doWork() {
+                try {
+                    List<File> files = FileUtil.listFilesOnce(file);
 
-                SwingUtilities.invokeLater(() -> {
-                    if (files != null && !files.isEmpty()) {
-                        if (files.size() == 1 && files.getFirst().isDirectory()) {
-                            DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(new FileData(files.getFirst()));
-                            node.add(newNode);
-                            loadSubFiles(newNode, currentModel);
-                        } else {
-                            for (File file1 : files) {
-                                DefaultMutableTreeNode addNode = new DefaultMutableTreeNode(new FileData(file1));
-                                if (file1.isDirectory()) {
-                                    DefaultMutableTreeNode loadingNode = new DefaultMutableTreeNode();
-                                    addNode.add(loadingNode);
+                    SwingUtilities.invokeLater(() -> {
+                        if (files != null && !files.isEmpty()) {
+                            if (files.size() == 1 && files.getFirst().isDirectory()) {
+                                DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(new FileData(files.getFirst()));
+                                node.add(newNode);
+                                loadSubFiles(newNode, currentModel);
+                            } else {
+                                for (File file1 : files) {
+                                    DefaultMutableTreeNode addNode = new DefaultMutableTreeNode(new FileData(file1));
+                                    if (file1.isDirectory()) {
+                                        DefaultMutableTreeNode loadingNode = new DefaultMutableTreeNode();
+                                        addNode.add(loadingNode);
+                                    }
+                                    node.add(addNode);
                                 }
-                                node.add(addNode);
                             }
+                        } else {
+                            node.add(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.emptyFolders")));
                         }
-                    } else {
-                        node.add(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.emptyFolders")));
-                    }
-                    node.remove(0);
-                    currentModel.reload(node);
-                });
-            } catch (Exception e) {
-                log.error("加载子文件失败", e);
-                SwingUtilities.invokeLater(() -> {
-                    node.remove(0);
-                    node.add(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.loadFailed") + e.getMessage()));
-                    currentModel.reload(node);
-                });
-            } finally {
-                isLoading.set(false);
+                        node.remove(0);
+                        currentModel.reload(node);
+                    });
+                } catch (Exception e) {
+                    log.error("加载子文件失败", e);
+                    SwingUtilities.invokeLater(() -> {
+                        node.remove(0);
+                        node.add(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.loadFailed") + e.getMessage()));
+                        currentModel.reload(node);
+                    });
+                } finally {
+                    isLoading.set(false);
+                }
+                return null;
             }
-        });
+        };
+
+        FileUtil.FILE_IO_EXECUTOR.submit(task);
     }
 
     /**
@@ -357,33 +485,43 @@ public class FileManager extends MiniWindow {
             JOptionPane.showMessageDialog(null,
                     FileUtil.getLang("miniWindow.fileManager.loadAll.notFolder"),
                     FileUtil.getLang("tip.warning"),
-                    JOptionPane.WARNING_MESSAGE);
+                    JOptionPane.WARNING_MESSAGE,
+                    self.getIcon()
+            );
             if (callback != null) callback.run();
             return;
         }
 
-        FileUtil.FILE_IO_EXECUTOR.submit(() -> {
-            try {
-                recursiveLoadAllNodes(targetNode, currentModel, file);
+        ControllableThreadTask<Void> task = new ControllableThreadTask<>() {
+            @Override
+            protected Void doWork() {
+                try {
+                    recursiveLoadAllNodes(targetNode, currentModel, file);
 
-                SwingUtilities.invokeLater(() -> {
-                    currentModel.reload(targetNode);
-                    log.info("全量加载完成：{}", file.getPath());
-                    if (callback != null) callback.run();
-                });
-            } catch (Exception e) {
-                log.error("全量加载文件节点失败", e);
-                SwingUtilities.invokeLater(() -> {
-                    JOptionPane.showMessageDialog(null,
-                            FileUtil.getLang("miniWindow.fileManager.loadAll.failed", file.getPath(), e.getMessage()),
-                            FileUtil.getLang("tip.error"),
-                            JOptionPane.ERROR_MESSAGE);
-                    if (callback != null) callback.run();
-                });
-            } finally {
-                isLoading.set(false);
+                    SwingUtilities.invokeLater(() -> {
+                        currentModel.reload(targetNode);
+                        log.info("全量加载完成：{}", file.getPath());
+                        if (callback != null) callback.run();
+                    });
+                } catch (Exception e) {
+                    log.error("全量加载文件节点失败", e);
+                    SwingUtilities.invokeLater(() -> {
+                        JOptionPane.showMessageDialog(null,
+                                FileUtil.getLang("miniWindow.fileManager.loadAll.failed", file.getPath(), e.getMessage()),
+                                FileUtil.getLang("tip.error"),
+                                JOptionPane.ERROR_MESSAGE,
+                                self.getIcon()
+                        );
+                        if (callback != null) callback.run();
+                    });
+                } finally {
+                    isLoading.set(false);
+                }
+                return null;
             }
-        });
+        };
+
+        FileUtil.FILE_IO_EXECUTOR.submit(task);
     }
 
     /**

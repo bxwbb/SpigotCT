@@ -287,6 +287,11 @@ public abstract class MiniWindow extends ResizablePanel {
         this.setMinimumSize(new Dimension(Setting.windowSplitDistance, Setting.windowSplitDistance));
     }
 
+    public ImageIcon getIcon() {
+        ImageIcon icon = new ImageIcon(Objects.requireNonNull(getClass().getResource(ICON_PATH)));
+        return new ImageIcon(icon.getImage().getScaledInstance(20, 20, Image.SCALE_SMOOTH));
+    }
+
     public record IconItem(ImageIcon imageIcon, String text) {
     }
 

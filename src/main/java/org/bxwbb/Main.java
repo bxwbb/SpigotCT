@@ -3,7 +3,7 @@ package org.bxwbb;
 import com.formdev.flatlaf.FlatDarculaLaf;
 import org.bxwbb.MiniWindow.StartPage;
 import org.bxwbb.Util.FileUtil;
-import org.bxwbb.Util.ScheduledTaskManager;
+import org.bxwbb.Util.Task.ScheduledTaskManager;
 import org.bxwbb.WorkEventer.WorkController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +56,7 @@ public class Main {
         JPanel bottomPanel = new JPanel();
         bottomPanel.add(Box.createHorizontalGlue());
         workController = new WorkController();
-        bottomPanel.add(workController.getShowButton().getShowButton());
+        bottomPanel.add(workController.getShowButton());
         jFrame.add(bottomPanel, BorderLayout.SOUTH);
         jFrame.setJMenuBar(menuBar);
         jFrame.setVisible(true);
