@@ -7,10 +7,7 @@ import org.bxwbb.Swing.CreateFolder;
 import org.bxwbb.UI.IndicatorStatus;
 import org.bxwbb.UI.MissionTip;
 import org.bxwbb.UI.RoundLabel;
-import org.bxwbb.Util.ClipboardUtil;
-import org.bxwbb.Util.FileUtil;
-import org.bxwbb.Util.JTreeExpandCollapseUtil;
-import org.bxwbb.Util.PathInfoFormatter;
+import org.bxwbb.Util.*;
 import org.bxwbb.Util.Task.ControllableThreadTask;
 import org.bxwbb.Util.Task.ScheduledTaskManager;
 import org.bxwbb.WorkEventer.Work;
@@ -56,7 +53,7 @@ public class FileManager extends MiniWindow {
     private String cutPath;
     // 是否开启剪切功能
     private boolean isCut = false;
-    private String refreshTaskID;
+    private String updateTaskID;
 
     FileManager self = this;
 
@@ -91,10 +88,8 @@ public class FileManager extends MiniWindow {
                     newFileTree.setMaximumSize(new Dimension(Integer.MAX_VALUE, Short.MAX_VALUE));
                     newFileTree.setBackground(Setting.BACKGROUND_COLOR);
 
-                    refreshTaskID = ScheduledTaskManager.getInstance().startFixedRateTask(1000, () -> {
-                        refreshTreeAsync(getParentNode(rootNode), newTreeModel);
-                        System.out.println("刷新啦");
-                    });
+                    ScheduledTaskManager.getInstance().startFixedRateTask(2000, () -> refreshTreeAsync(rootNode, newTreeModel, newFileTree, false));
+
                     newFileTree.getSelectionModel().addTreeSelectionListener(treeSelectionEvent -> openFiles(newFileTree, newTreeModel));
                     newFileTree.addTreeExpansionListener(new TreeExpansionListener() {
                         @Override
@@ -174,7 +169,7 @@ public class FileManager extends MiniWindow {
 
     @Override
     public void delete() {
-        ScheduledTaskManager.getInstance().stopTask(refreshTaskID);
+        ScheduledTaskManager.getInstance().stopTask(updateTaskID);
     }
 
     private DefaultMutableTreeNode getParentNode(DefaultMutableTreeNode node) {
@@ -350,7 +345,7 @@ public class FileManager extends MiniWindow {
             popupMenu.addSeparator();
             if (file.isDirectory()) {
                 JMenuItem refresh = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.refresh"));
-                refresh.addActionListener(e -> refreshTreeAsync(selectedNode, currentModel));
+                refresh.addActionListener(e -> refreshTreeAsync(selectedNode, currentModel, tree));
                 popupMenu.add(refresh);
             }
             JMenuItem expand = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.expand"));
@@ -527,10 +522,9 @@ public class FileManager extends MiniWindow {
         });
     }
 
-//    private void refreshTree(DefaultMutableTreeNode node, DefaultTreeModel currentModel) {
-//        node.removeAllChildren();
-//        loadSubFiles(node, currentModel);
-//    }
+    private void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree) {
+        refreshTreeAsync(node, currentModel, tree, true);
+    }
 
     /**
      * 刷新树：仅操作传入的当前节点/模型（完全隔离）
@@ -538,7 +532,7 @@ public class FileManager extends MiniWindow {
      * @param node         当前节点
      * @param currentModel 当前树模型
      */
-    private void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel) {
+    private void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree, boolean hasWorker) {
         WorkControllableThreadTask refreshWork = new WorkControllableThreadTask(
                 FileUtil.getLang("miniWindow.fileManager.popMenu.workerName"),
                 "",
@@ -547,89 +541,141 @@ public class FileManager extends MiniWindow {
         ControllableThreadTask<Void> refreshTask = new ControllableThreadTask<>() {
             @Override
             protected Void doWork() throws InterruptedException {
-                Thread.sleep(500);
-                refreshTree(node, currentModel);
-                currentModel.reload(node);
-                Main.getWorkController().removeWork(refreshWork);
+                if (hasWorker) Thread.sleep(500);
+                refreshTree(node, tree);
+                SwingUtilities.invokeLater(() -> {
+//                    JTreeExpandStateManager jTreeExpandStateManager = new JTreeExpandStateManager(tree);
+//                    Map<TreePath, Boolean> expandStateMap = jTreeExpandStateManager.recordExpandState(node);
+                    FileTreeSorter fileTreeSorter = new FileTreeSorter(tree, currentModel);
+                    fileTreeSorter.sortTree(node, FileTreeSorter.SortType.NAME, true, true);
+                    System.out.println("刷新啦");
+                    currentModel.nodeChanged(node);
+//                    jTreeExpandStateManager.restoreExpandState(expandStateMap);
+                });
+                if (hasWorker) Main.getWorkController().removeWork(refreshWork);
                 return null;
             }
         };
         String taskID = FileUtil.FILE_IO_EXECUTOR.submit(refreshTask);
-        refreshWork.setTaskID(taskID);
-        Main.getWorkController().addWork(refreshWork);
+        if (hasWorker) {
+            refreshWork.setTaskID(taskID);
+            Main.getWorkController().addWork(refreshWork);
+        }
     }
 
-    /**
-     * 刷新树形节点：同步文件夹内容与树形节点（增删节点）+ 递归刷新未加载的文件夹节点
-     * 优化点：移除冗余的nodeFileMap，消除静态检查提示，逻辑更简洁
-     */
-    private void refreshTree(DefaultMutableTreeNode node, DefaultTreeModel currentModel) {
-        // 1. 校验节点数据（确保是文件夹，符合你的业务约定）
+    private void refreshTree(DefaultMutableTreeNode node, JTree tree) {
         if (!(node.getUserObject() instanceof FileData(File folder))) {
             return;
         }
-        // 假设FileData有getFile()方法获取对应File
         if (!folder.isDirectory()) {
-            return; // 按你要求：传入节点一定是文件夹，此处做兜底校验
+            return;
         }
 
-        // 2. 获取文件夹下的所有子文件（处理null，避免空指针）
         File[] filesArray = folder.listFiles();
-        List<File> folderFiles = filesArray == null ? new ArrayList<>() : Arrays.asList(filesArray);
+        List<File> folderFiles = filesArray == null ? new ArrayList<>() : new ArrayList<>(List.of(filesArray));
         if (folderFiles.isEmpty()) {
             node.removeAllChildren();
             node.add(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.emptyFolders")));
             return;
         }
-        if (isNotLoad(node)) node.removeAllChildren();
-        // 转换为Set，方便快速判断文件是否存在
-        Set<File> folderFileSet = new HashSet<>(folderFiles);
+        if (isNotLoad(node)) {
+            node.removeAllChildren();
+        }
 
-        // 3. 收集待删除的节点 + 标记已匹配的文件
-        List<DefaultMutableTreeNode> deleteNodes = new ArrayList<>();
+        Set<File> fileSet = new HashSet<>(folderFiles);
+        List<DefaultMutableTreeNode> removeNodes = new ArrayList<>();
         Enumeration<TreeNode> childNodesEnum = node.children();
-
-        // 遍历所有子节点，分类处理
         while (childNodesEnum.hasMoreElements()) {
             TreeNode childNode = childNodesEnum.nextElement();
             if (!(childNode instanceof DefaultMutableTreeNode childMutableNode)) {
                 continue;
             }
-
-            // 3.1 提取子节点对应的File
-            File nodeFile = null;
-            if (childMutableNode.getUserObject() instanceof FileData(File file)) {
-                nodeFile = file;
-            }
-
-            // 3.2 情况1：节点无对应File 或 File已不存在 → 标记删除
-            if (nodeFile == null || !folderFileSet.contains(nodeFile)) {
-                deleteNodes.add(childMutableNode);
-            } else {
-                // 3.3 情况2：节点有对应File → 移除已匹配的File（剩余的就是需要新增的）
-                folderFileSet.remove(nodeFile);
-
-                // 3.4 递归刷新：如果子节点是文件夹且未加载 → 调用refreshTree
-                if (nodeFile.isDirectory() && isNotLoad(childMutableNode)) {
-                    refreshTree(childMutableNode, currentModel); // 递归刷新未加载的文件夹节点
+            if ((childMutableNode.getUserObject() instanceof FileData(File nodeFile))) {
+                if (fileSet.contains(nodeFile)) {
+                    folderFiles.remove(nodeFile);
+                    if (nodeFile.isDirectory() && isNodeVisibleInViewport(tree, childMutableNode)) {
+                        refreshTree(childMutableNode, tree);
+                    }
+                } else {
+                    removeNodes.add(childMutableNode);
                 }
+            } else {
+                removeNodes.add(childMutableNode);
             }
         }
 
-        // 4. 处理需要新增的节点（剩余的folderFileSet中的File都是未匹配的）
-        for (File fileToAdd : folderFileSet) {
-            DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(new FileData(fileToAdd));
-            node.add(newNode);
-
-            // 新增节点如果是文件夹且未加载 → 立即递归刷新（可选，按你的需求）
-            if (fileToAdd.isDirectory() && isNotLoad(newNode)) {
-                refreshTree(newNode, currentModel);
-            }
+        for (DefaultMutableTreeNode removeNode : removeNodes) {
+            node.remove(removeNode);
         }
 
-        // 5. 批量删除无效节点（有节点无文件）
-        for (DefaultMutableTreeNode deleteNode : deleteNodes) {
-            node.remove(deleteNode);
+        for (File folderFile : folderFiles) {
+            node.add(new DefaultMutableTreeNode(new FileData(folderFile)));
+        }
+
+    }
+
+    /**
+     * 判断树节点是否在JTree窗口中实际绘制（可见）
+     *
+     * @param tree 目标JTree
+     * @param node 要判断的节点
+     * @return true=节点在窗口中绘制（可见），false=未绘制（不可见）
+     */
+    public static boolean isNodeVisibleInViewport(JTree tree, DefaultMutableTreeNode node) {
+        // 1. 节点为空，直接返回false
+        if (node == null || tree == null) {
+            return false;
+        }
+
+        // 2. 构建节点的TreePath（必须通过TreePath判断展开状态）
+        TreePath nodePath = new TreePath(node.getPath());
+
+        // 3. 第一步：判断节点是否展开（父节点未折叠，节点本身可被访问）
+        if (!tree.isVisible(nodePath)) {
+            return false;
+        }
+
+        try {
+            // 4. 第二步：获取节点在JTree中的绘制矩形
+            Rectangle nodeRect = tree.getPathBounds(nodePath);
+            if (nodeRect == null) {
+                return false;
+            }
+
+            // 5. 第三步：获取JTree的可见视图区域（视口范围）
+            Rectangle viewportRect = tree.getVisibleRect();
+
+            // 6. 最终判断：节点矩形与视口矩形有交集 → 节点在窗口中绘制
+            return nodeRect.intersects(viewportRect);
+        } catch (Exception e) {
+            // 异常情况（如节点未加载）返回false
+            return false;
+        }
+    }
+
+    /**
+     * 扩展：获取JTree中所有当前绘制（可见）的节点
+     *
+     * @param tree     目标JTree
+     * @param rootNode 根节点（从该节点开始遍历）
+     * @return 可见节点列表
+     */
+    public static List<DefaultMutableTreeNode> getVisibleNodesInViewport(JTree tree, DefaultMutableTreeNode rootNode) {
+        List<DefaultMutableTreeNode> visibleNodes = new ArrayList<>();
+        if (rootNode == null || tree == null) {
+            return visibleNodes;
+        }
+        traverseNode(tree, rootNode, visibleNodes);
+        return visibleNodes;
+    }
+
+    private static void traverseNode(JTree tree, DefaultMutableTreeNode node, List<DefaultMutableTreeNode> visibleNodes) {
+        if (isNodeVisibleInViewport(tree, node)) {
+            visibleNodes.add(node);
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) node.getChildAt(i);
+            traverseNode(tree, childNode, visibleNodes);
         }
     }
 
