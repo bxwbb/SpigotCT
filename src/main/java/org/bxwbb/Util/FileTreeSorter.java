@@ -2,152 +2,195 @@ package org.bxwbb.Util;
 
 import org.bxwbb.MiniWindow.FileManager;
 
-import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
-import javax.swing.tree.TreeNode;
-import javax.swing.tree.TreePath;
-import java.io.File;
-import java.util.*;
+import java.util.Comparator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class FileTreeSorter {
 
-    // 排序类型枚举
     public enum SortType {
         NAME,
         CREATE_TIME_ASC,
         CREATE_TIME_DESC
     }
 
-    private final JTree tree;
     private final DefaultTreeModel treeModel;
+    private SortType currentSortType;
+    private boolean folderFirst;
 
-    public FileTreeSorter(JTree tree, DefaultTreeModel treeModel) {
-        this.tree = tree;
+    public FileTreeSorter(DefaultTreeModel treeModel) {
         this.treeModel = treeModel;
+        this.currentSortType = SortType.NAME;
+        this.folderFirst = true;
     }
 
     /**
-     * 对指定节点的子节点进行排序（递归可选）
-     * @param rootNode 要排序的根节点
-     * @param sortType 排序类型
-     * @param folderFirst 是否文件夹置顶
-     * @param recursive 是否递归排序子文件夹
+     * 设置排序规则（后续插入的节点都会按此规则排序）
      */
-    public void sortTree(DefaultMutableTreeNode rootNode, SortType sortType, boolean folderFirst, boolean recursive) {
-        Map<DefaultMutableTreeNode, Boolean> expandStateMap = recordExpandState(rootNode);
-
-        sortNodeChildren(rootNode, sortType, folderFirst, recursive);
-
-        restoreExpandState(expandStateMap);
+    public void setSortRule(SortType sortType, boolean folderFirst) {
+        this.currentSortType = sortType;
+        this.folderFirst = folderFirst;
     }
 
     /**
-     * 记录指定节点及其所有子节点的展开状态
+     * 插入节点到父节点的正确位置（核心插入排序方法）
+     * @param parentNode 父节点
+     * @param newNode 要插入的新节点
      */
-    private Map<DefaultMutableTreeNode, Boolean> recordExpandState(DefaultMutableTreeNode node) {
-        Map<DefaultMutableTreeNode, Boolean> stateMap = new HashMap<>();
-        stateMap.put(node, tree.isExpanded(new TreePath(node.getPath())));
-        Enumeration<TreeNode> children = node.children();
-        while (children.hasMoreElements()) {
-            TreeNode child = children.nextElement();
-            if (child instanceof DefaultMutableTreeNode childNode) {
-                stateMap.putAll(recordExpandState(childNode));
-            }
-        }
-        return stateMap;
-    }
-
-    /**
-     * 恢复节点展开状态
-     */
-    private void restoreExpandState(Map<DefaultMutableTreeNode, Boolean> expandStateMap) {
-        for (Map.Entry<DefaultMutableTreeNode, Boolean> entry : expandStateMap.entrySet()) {
-            DefaultMutableTreeNode node = entry.getKey();
-            boolean isExpanded = entry.getValue();
-            TreePath path = new TreePath(node.getPath());
-            if (isExpanded && !tree.isExpanded(path)) {
-                tree.expandPath(path);
-            } else if (!isExpanded && tree.isExpanded(path)) {
-                tree.collapsePath(path);
-            }
-        }
-    }
-
-    /**
-     * 排序单个节点的子节点（核心排序逻辑）
-     */
-    private void sortNodeChildren(DefaultMutableTreeNode parentNode, SortType sortType, boolean folderFirst, boolean recursive) {
-        if (!(parentNode.getUserObject() instanceof FileManager.FileData) || !((FileManager.FileData) parentNode.getUserObject()).file().isDirectory()) {
+    public void insertNodeInSortedPosition(DefaultMutableTreeNode parentNode, DefaultMutableTreeNode newNode) {
+        if (parentNode.getUserObject() == null) {
+            parentNode.add(newNode);
+            treeModel.nodeStructureChanged(parentNode);
             return;
         }
 
-        List<DefaultMutableTreeNode> folderNodes = new ArrayList<>();
-        List<DefaultMutableTreeNode> fileNodes = new ArrayList<>();
-        Enumeration<TreeNode> children = parentNode.children();
-        while (children.hasMoreElements()) {
-            TreeNode child = children.nextElement();
-            if (!(child instanceof DefaultMutableTreeNode childNode)) {
+        int childCount = parentNode.getChildCount();
+        int insertIndex = 0;
+
+        Comparator<DefaultMutableTreeNode> comparator = getNodeComparator(currentSortType);
+
+        for (; insertIndex < childCount; insertIndex++) {
+            DefaultMutableTreeNode existingNode = (DefaultMutableTreeNode) parentNode.getChildAt(insertIndex);
+
+            if (existingNode.getUserObject() == null && newNode.getUserObject() != null) {
+                break;
+            }
+
+            if (newNode.getUserObject() == null && existingNode.getUserObject() != null) {
                 continue;
             }
-            if (!(childNode.getUserObject() instanceof FileManager.FileData)) {
-                continue;
-            }
-            File file = ((FileManager.FileData) childNode.getUserObject()).file();
-            if (file.isDirectory()) {
-                folderNodes.add(childNode);
+
+            if (folderFirst) {
+                boolean newIsFolder = isNodeFolder(newNode);
+                boolean existingIsFolder = isNodeFolder(existingNode);
+
+                if (newIsFolder && !existingIsFolder) {
+                    break;
+                } else if (!(!newIsFolder && existingIsFolder)) {
+                    if (comparator.compare(newNode, existingNode) < 0) {
+                        break;
+                    }
+                }
             } else {
-                fileNodes.add(childNode);
+                if (comparator.compare(newNode, existingNode) < 0) {
+                    break;
+                }
             }
         }
 
-        Comparator<DefaultMutableTreeNode> comparator = getNodeComparator(sortType);
-        folderNodes.sort(comparator);
-        fileNodes.sort(comparator);
-
-        List<DefaultMutableTreeNode> sortedNodes = new ArrayList<>();
-        if (folderFirst) {
-            sortedNodes.addAll(folderNodes);
-            sortedNodes.addAll(fileNodes);
-        } else {
-            sortedNodes.addAll(folderNodes);
-            sortedNodes.addAll(fileNodes);
-            sortedNodes.sort(comparator);
-        }
-
-        parentNode.removeAllChildren();
-        for (DefaultMutableTreeNode node : sortedNodes) {
-            parentNode.add(node);
-            if (recursive && ((FileManager.FileData) node.getUserObject()).file().isDirectory()) {
-                sortNodeChildren(node, sortType, folderFirst, true);
-            }
-        }
+        parentNode.insert(newNode, insertIndex);
+        treeModel.nodesWereInserted(parentNode, new int[]{insertIndex});
     }
 
     /**
-     * 获取节点比较器（按名称/创建时间）
+     * 判断节点是否为文件夹类型
+     * @param node 待判断节点
+     * @return true=文件夹（FileData文件夹/String空文件夹），false=文件/null节点
+     */
+    private boolean isNodeFolder(DefaultMutableTreeNode node) {
+        Object userObj = node.getUserObject();
+
+        return switch (userObj) {
+            case String ignored -> true;
+            case FileManager.FileData fileData -> fileData.file().isDirectory();
+            default -> false;
+        };
+
+    }
+
+    /**
+     * 获取节点的排序名称
+     * @param node 节点
+     * @return 排序用的名称（null节点返回空字符串）
+     */
+    private String getNodeSortName(DefaultMutableTreeNode node) {
+        Object userObj = node.getUserObject();
+
+        return switch (userObj) {
+            case null -> "";
+            case String str -> str.toLowerCase();
+            case FileManager.FileData fileData -> fileData.file().getName().toLowerCase();
+            default -> userObj.toString().toLowerCase();
+        };
+
+    }
+
+    /**
+     * 获取节点的修改时间（用于时间排序）
+     * @param node 节点
+     * @return 修改时间（非FileData节点返回0）
+     */
+    private long getNodeModifyTime(DefaultMutableTreeNode node) {
+        Object userObj = node.getUserObject();
+
+        if (userObj instanceof FileManager.FileData(java.io.File file)) {
+            return file.lastModified();
+        }
+
+        return 0;
+    }
+
+    /**
+     * 对已有父节点的所有子节点重新进行插入排序整理（用于首次初始化排序）
+     */
+    public void reSortExistingChildren(DefaultMutableTreeNode parentNode) {
+        if (parentNode.getUserObject() == null) {
+            return;
+        }
+
+        int childCount = parentNode.getChildCount();
+        DefaultMutableTreeNode[] tempNodes = new DefaultMutableTreeNode[childCount];
+        for (int i = 0; i < childCount; i++) {
+            tempNodes[i] = (DefaultMutableTreeNode) parentNode.getChildAt(i);
+        }
+
+        parentNode.removeAllChildren();
+
+        for (DefaultMutableTreeNode node : tempNodes) {
+            insertNodeInSortedPosition(parentNode, node);
+
+            if (isNodeFolder(node)) {
+                if (!(node.getUserObject() instanceof String)) {
+                    reSortExistingChildren(node);
+                }
+            }
+        }
+
+        treeModel.nodeStructureChanged(parentNode);
+    }
+
+    /**
+     * 获取节点比较器（适配String/null/FileData类型）
      */
     private Comparator<DefaultMutableTreeNode> getNodeComparator(SortType sortType) {
         return (node1, node2) -> {
-            File file1 = ((FileManager.FileData) node1.getUserObject()).file();
-            File file2 = ((FileManager.FileData) node2.getUserObject()).file();
+            if (node1.getUserObject() == null && node2.getUserObject() == null) {
+                return 0;
+            }
+            if (node1.getUserObject() == null) {
+                return 1;
+            }
+            if (node2.getUserObject() == null) {
+                return -1;
+            }
 
             return switch (sortType) {
-                case NAME -> compareByName(file1, file2);
-                case CREATE_TIME_ASC -> Long.compare(file1.lastModified(), file2.lastModified());
-                case CREATE_TIME_DESC -> Long.compare(file2.lastModified(), file1.lastModified());
+                case NAME -> compareNodesByName(node1, node2);
+                case CREATE_TIME_ASC -> Long.compare(getNodeModifyTime(node1), getNodeModifyTime(node2));
+                case CREATE_TIME_DESC -> Long.compare(getNodeModifyTime(node2), getNodeModifyTime(node1));
             };
         };
     }
 
     /**
-     * Windows风格名称自然排序（核心）
+     * 按名称比较节点（适配String/FileData类型）
      */
-    private int compareByName(File f1, File f2) {
-        String s1 = f1.getName().toLowerCase();
-        String s2 = f2.getName().toLowerCase();
+    private int compareNodesByName(DefaultMutableTreeNode node1, DefaultMutableTreeNode node2) {
+        String s1 = getNodeSortName(node1);
+        String s2 = getNodeSortName(node2);
+
         Pattern numberPattern = Pattern.compile("(\\d+)");
         Matcher m1 = numberPattern.matcher(s1);
         Matcher m2 = numberPattern.matcher(s2);
@@ -171,5 +214,13 @@ public class FileTreeSorter {
         String remaining1 = s1.substring(pos1);
         String remaining2 = s2.substring(pos2);
         return remaining1.compareTo(remaining2);
+    }
+
+    public SortType getCurrentSortType() {
+        return currentSortType;
+    }
+
+    public boolean isFolderFirst() {
+        return folderFirst;
     }
 }

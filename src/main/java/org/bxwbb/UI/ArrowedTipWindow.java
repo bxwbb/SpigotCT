@@ -333,35 +333,4 @@ public class ArrowedTipWindow extends JWindow {
         this.arrowSize = arrowSize;
         repaint();
     }
-
-    // ===================== 测试用例 =====================
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            JFrame frame = new JFrame("最终版：窗口在控件上方，箭头向下指向控件");
-            frame.setSize(600, 400);
-            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.setLayout(new FlowLayout(FlowLayout.CENTER, 30, 100));
-            frame.setLocationRelativeTo(null);
-
-            JButton infoBtn = new JButton("信息提示");
-            infoBtn.addActionListener(e ->
-                    ArrowedTipWindow.info(infoBtn, "文件夹创建成功！\n名称：测试文件夹")
-            );
-            frame.add(infoBtn);
-
-            JButton warnBtn = new JButton("警告提示");
-            warnBtn.addActionListener(e ->
-                    ArrowedTipWindow.warn(warnBtn, "文件夹名称包含特殊字符！")
-            );
-            frame.add(warnBtn);
-
-            JButton errorBtn = new JButton("错误提示");
-            errorBtn.addActionListener(e ->
-                    ArrowedTipWindow.error(errorBtn, "权限不足，创建失败！")
-            );
-            frame.add(errorBtn);
-
-            frame.setVisible(true);
-        });
-    }
 }

@@ -716,7 +716,7 @@ public class FileUtil {
      * @throws IllegalArgumentException 路径为空/不存在时抛出
      * @throws IOException              系统命令执行失败/权限不足时抛出
      */
-    private static boolean moveToRecycleBin(String path) throws IOException {
+    public static boolean moveToRecycleBin(String path) throws IOException {
         File target = new File(path);
         String absolutePath = target.getAbsolutePath();
         String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);

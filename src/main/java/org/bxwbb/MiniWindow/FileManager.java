@@ -9,7 +9,6 @@ import org.bxwbb.UI.MissionTip;
 import org.bxwbb.UI.RoundLabel;
 import org.bxwbb.Util.*;
 import org.bxwbb.Util.Task.ControllableThreadTask;
-import org.bxwbb.Util.Task.ScheduledTaskManager;
 import org.bxwbb.WorkEventer.Work;
 import org.bxwbb.WorkEventer.WorkControllableThreadTask;
 import org.slf4j.Logger;
@@ -40,7 +39,6 @@ public class FileManager extends MiniWindow {
     private static final Logger log = LoggerFactory.getLogger(FileManager.class);
     private final AtomicBoolean isLoading = new AtomicBoolean(false);
     private final AtomicInteger loadingCount = new AtomicInteger(0);
-    // 询问用户文件数最低值
     private static final int MIN_FILE_COUNT = 10000;
 
     private File rootFile;
@@ -49,11 +47,9 @@ public class FileManager extends MiniWindow {
         super(FileManager.class);
     }
 
-    // 剪切路径
     private String cutPath;
-    // 是否开启剪切功能
+    private DefaultMutableTreeNode cutNode;
     private boolean isCut = false;
-    private String updateTaskID;
 
     FileManager self = this;
 
@@ -88,8 +84,6 @@ public class FileManager extends MiniWindow {
                     newFileTree.setMaximumSize(new Dimension(Integer.MAX_VALUE, Short.MAX_VALUE));
                     newFileTree.setBackground(Setting.BACKGROUND_COLOR);
 
-                    ScheduledTaskManager.getInstance().startFixedRateTask(2000, () -> refreshTreeAsync(rootNode, newTreeModel, newFileTree, false));
-
                     newFileTree.getSelectionModel().addTreeSelectionListener(treeSelectionEvent -> openFiles(newFileTree, newTreeModel));
                     newFileTree.addTreeExpansionListener(new TreeExpansionListener() {
                         @Override
@@ -97,8 +91,7 @@ public class FileManager extends MiniWindow {
                             SwingUtilities.invokeLater(() -> {
                                 TreePath expandedPath = event.getPath();
                                 DefaultMutableTreeNode expandedNode = (DefaultMutableTreeNode) expandedPath.getLastPathComponent();
-                                if (isNotLoad(expandedNode)) loadSubFiles(expandedNode, newTreeModel);
-                                autoExpandSingleChildNode(expandedNode, newFileTree, newTreeModel);
+                                refreshTreeAsync(expandedNode, newTreeModel, newFileTree);
                             });
                         }
 
@@ -138,13 +131,16 @@ public class FileManager extends MiniWindow {
                     newScrollPane.setBorder(BorderFactory.createEtchedBorder());
                     newScrollPane.getViewport().setMaximumSize(new Dimension(Integer.MAX_VALUE, 400));
 
-                    loadSubFiles(rootNode, newTreeModel);
+                    refreshTreeAsync(rootNode, newTreeModel, newFileTree, () -> {
+                        newFileTree.expandPath(new TreePath(rootNode.getPath()));
+                        centerPanel.revalidate();
+                        centerPanel.repaint();
+                    });
 
                     centerPanel.setLayout(new BorderLayout());
                     centerPanel.add(newScrollPane, BorderLayout.CENTER);
                     centerPanel.revalidate();
                     centerPanel.repaint();
-
                 } catch (Exception e) {
                     log.error("加载文件目录树失败", e);
                     JOptionPane.showMessageDialog(
@@ -169,19 +165,8 @@ public class FileManager extends MiniWindow {
 
     @Override
     public void delete() {
-        ScheduledTaskManager.getInstance().stopTask(updateTaskID);
     }
 
-    private DefaultMutableTreeNode getParentNode(DefaultMutableTreeNode node) {
-        return node.isRoot() ? node : (DefaultMutableTreeNode) node.getParent();
-    }
-
-    /**
-     * 创建右键菜单
-     *
-     * @param popupMenu    右键菜单
-     * @param selectedNode 选中的节点
-     */
     private void createPopMenu(JPopupMenu popupMenu, DefaultMutableTreeNode selectedNode, DefaultTreeModel currentModel, JTree tree) {
         if (selectedNode.getUserObject() instanceof FileData(File file)) {
             JMenu createNew = new JMenu(FileUtil.getLang("miniWindow.fileManager.popMenu.create"));
@@ -201,6 +186,11 @@ public class FileManager extends MiniWindow {
                 dialog.setSize(600, 200);
                 dialog.setLocationRelativeTo(null);
                 dialog.setVisible(true);
+                if (file.isDirectory()) {
+                    refreshTreeAsync(selectedNode, currentModel, tree);
+                } else {
+                    refreshTreeAsync((DefaultMutableTreeNode) selectedNode.getParent(), currentModel, tree);
+                }
             });
             createNew.add(createFile);
             JMenuItem createFolder = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.create.folder"),
@@ -219,6 +209,11 @@ public class FileManager extends MiniWindow {
                 dialog.setSize(600, 200);
                 dialog.setLocationRelativeTo(null);
                 dialog.setVisible(true);
+                if (file.isDirectory()) {
+                    refreshTreeAsync(selectedNode, currentModel, tree);
+                } else {
+                    refreshTreeAsync((DefaultMutableTreeNode) selectedNode.getParent(), currentModel, tree);
+                }
             });
             createNew.add(createFolder);
             popupMenu.add(createNew);
@@ -255,6 +250,18 @@ public class FileManager extends MiniWindow {
                                 }
                             }
                         }
+                        if (isCut) {
+                            if (!FileUtil.moveToRecycleBin(cutPath)) {
+                                log.error("在剪切文件时删除原路径文件失败 - {}", cutPath);
+                            }
+                            isCut = false;
+                            if (file.isDirectory()) {
+                                refreshTreeAsync(selectedNode, currentModel, tree);
+                            } else {
+                                refreshTreeAsync((DefaultMutableTreeNode) selectedNode.getParent(), currentModel, tree);
+                            }
+                            refreshTreeAsync(cutNode, currentModel, tree);
+                        }
                     }
                 } catch (UnsupportedFlavorException | IOException ex) {
                     log.error("获取剪贴板内容失败 -> ", ex);
@@ -268,10 +275,11 @@ public class FileManager extends MiniWindow {
                 }
                 isCut = true;
                 cutPath = file.getAbsolutePath();
+                cutNode = selectedNode;
             });
             popupMenu.add(cutFile);
-            JMenuItem coptFile = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copyFile"));
-            coptFile.addActionListener((e) -> {
+            JMenuItem copyFile = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copyFile"));
+            copyFile.addActionListener((e) -> {
                 boolean ret = ClipboardUtil.copyFileToClipboard(file);
                 if (!ret) {
                     JOptionPane.showMessageDialog(
@@ -283,7 +291,7 @@ public class FileManager extends MiniWindow {
                     );
                 }
             });
-            popupMenu.add(coptFile);
+            popupMenu.add(copyFile);
             JMenu copyFileOther = new JMenu(FileUtil.getLang("miniWindow.fileManager.popMenu.copy"));
             JMenuItem copyFilePath = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.path"));
             copyFilePath.addActionListener(e -> ClipboardUtil.copyTextToClipboard(file.getPath()));
@@ -324,9 +332,7 @@ public class FileManager extends MiniWindow {
                 });
                 copyFileOther.add(copyFileOwner);
                 JMenuItem copyFileAll = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.copy.all"));
-                copyFileAll.addActionListener(e -> {
-                    ClipboardUtil.copyTextToClipboard(PathInfoFormatter.getFormattedPathInfo(file.toPath()));
-                });
+                copyFileAll.addActionListener(e -> ClipboardUtil.copyTextToClipboard(PathInfoFormatter.getFormattedPathInfo(file.toPath())));
                 copyFileOther.add(copyFileAll);
             } catch (IOException e) {
                 log.error("读取文件时发生错误 - {} -> ", file.getPath(), e);
@@ -337,6 +343,7 @@ public class FileManager extends MiniWindow {
                     if (!FileUtil.deleteWithConfirm(file.getPath(), null)) {
                         log.error("删除文件时发生错误 - {}", file.getPath());
                     }
+                    refreshTreeAsync((DefaultMutableTreeNode) selectedNode.getParent(), currentModel, tree);
                 } catch (IOException ex) {
                     log.error("删除文件时发生错误 - {} -> ", file.getPath(), ex);
                 }
@@ -353,6 +360,7 @@ public class FileManager extends MiniWindow {
                 Work worker = new Work(FileUtil.getLang("miniWindow.fileManager.loadAll.workerName", "?", "正在统计"));
                 worker.setStatus(IndicatorStatus.WAITING_OTHER);
                 Main.getWorkController().addWork(worker);
+                Main.getWorkController().showInfo();
                 String taskID = FileUtil.countAllFilesAsync(file, (count) -> {
                     worker.setMaxValue(count);
                     worker.setValue(0);
@@ -404,16 +412,13 @@ public class FileManager extends MiniWindow {
         }
     }
 
-    /**
-     * 打开文件：仅操作传入的当前树/模型（无成员变量引用，避免错乱）
-     */
     private void openFiles(JTree currentTree, DefaultTreeModel currentModel) {
         DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) currentTree.getLastSelectedPathComponent();
         if (selectedNode == null || selectedNode.isRoot() || !isNotLoad(selectedNode)) return;
 
         Object nodeObj = selectedNode.getUserObject();
         if (nodeObj instanceof FileData(File file) && file.isDirectory()) {
-            loadSubFiles(selectedNode, currentModel);
+            refreshTreeAsync(selectedNode, currentModel, currentTree);
         }
     }
 
@@ -427,112 +432,11 @@ public class FileManager extends MiniWindow {
         }
     }
 
-    /**
-     * 加载子文件：仅操作传入的当前节点/模型（完全隔离）
-     */
-    private void loadSubFiles(DefaultMutableTreeNode node, DefaultTreeModel currentModel) {
-        if (!isNotLoad(node)) {
-            isLoading.set(false);
-            return;
-        }
-
-        if (!isLoading.compareAndSet(false, true)) {
-            log.warn("文件加载中，请勿重复操作");
-            return;
-        }
-
-        Object userData = node.getUserObject();
-        if (!(userData instanceof FileData(File file)) || !file.isDirectory()) {
-            isLoading.set(false);
-            return;
-        }
-
-        node.removeAllChildren();
-        if (node.getChildCount() == 0) {
-            DefaultMutableTreeNode loadingNode = new DefaultMutableTreeNode();
-            node.add(loadingNode);
-        }
-        SwingUtilities.invokeLater(() -> currentModel.reload(node));
-
-        ControllableThreadTask<Void> task = new ControllableThreadTask<>() {
-            @Override
-            protected Void doWork() {
-                try {
-                    List<File> files = FileUtil.listFilesOnce(file);
-
-                    SwingUtilities.invokeLater(() -> {
-                        if (files != null && !files.isEmpty()) {
-                            if (files.size() == 1 && files.getFirst().isDirectory()) {
-                                DefaultMutableTreeNode newNode = new DefaultMutableTreeNode(new FileData(files.getFirst()));
-                                node.add(newNode);
-                                loadSubFiles(newNode, currentModel);
-                            } else {
-                                for (File file1 : files) {
-                                    DefaultMutableTreeNode addNode = new DefaultMutableTreeNode(new FileData(file1));
-                                    if (file1.isDirectory()) {
-                                        DefaultMutableTreeNode loadingNode = new DefaultMutableTreeNode();
-                                        addNode.add(loadingNode);
-                                    }
-                                    node.add(addNode);
-                                }
-                            }
-                        } else {
-                            node.add(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.emptyFolders")));
-                        }
-                        node.remove(0);
-                        currentModel.reload(node);
-                    });
-                } catch (Exception e) {
-                    log.error("加载子文件失败", e);
-                    SwingUtilities.invokeLater(() -> {
-                        node.remove(0);
-                        node.add(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.loadFailed") + e.getMessage()));
-                        currentModel.reload(node);
-                    });
-                } finally {
-                    isLoading.set(false);
-                }
-                return null;
-            }
-        };
-
-        FileUtil.FILE_IO_EXECUTOR.submit(task);
-    }
-
-    /**
-     * 自动展开唯一子节点：仅操作传入的当前对象
-     */
-    private void autoExpandSingleChildNode(DefaultMutableTreeNode node, JTree currentTree, DefaultTreeModel currentModel) {
-        if (node == null || currentTree == null || currentModel == null) return;
-        if (isNotLoad(node)) loadSubFiles(node, currentModel);
-        if (node.getChildCount() != 1) return;
-
-        DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) node.getFirstChild();
-        Object childObj = childNode.getUserObject();
-        if (!(childObj instanceof FileData) || !((FileData) childObj).file().isDirectory()) return;
-
-        currentModel.reload(node);
-        TreePath childPath = new TreePath(childNode.getPath());
-
-        SwingUtilities.invokeLater(() -> {
-            if (!currentTree.isExpanded(childPath)) {
-                currentTree.expandPath(childPath);
-                autoExpandSingleChildNode(childNode, currentTree, currentModel);
-            }
-        });
-    }
-
     private void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree) {
-        refreshTreeAsync(node, currentModel, tree, true);
+        refreshTreeAsync(node, currentModel, tree, null);
     }
 
-    /**
-     * 刷新树：仅操作传入的当前节点/模型（完全隔离）
-     *
-     * @param node         当前节点
-     * @param currentModel 当前树模型
-     */
-    private void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree, boolean hasWorker) {
+    private void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree, Runnable callBackFunction) {
         WorkControllableThreadTask refreshWork = new WorkControllableThreadTask(
                 FileUtil.getLang("miniWindow.fileManager.popMenu.workerName"),
                 "",
@@ -541,26 +445,25 @@ public class FileManager extends MiniWindow {
         ControllableThreadTask<Void> refreshTask = new ControllableThreadTask<>() {
             @Override
             protected Void doWork() throws InterruptedException {
-                if (hasWorker) Thread.sleep(500);
+                Thread.sleep(500);
                 refreshTree(node, tree);
                 SwingUtilities.invokeLater(() -> {
-//                    JTreeExpandStateManager jTreeExpandStateManager = new JTreeExpandStateManager(tree);
+                    JTreeExpandStateManager jTreeExpandStateManager = new JTreeExpandStateManager(tree);
 //                    Map<TreePath, Boolean> expandStateMap = jTreeExpandStateManager.recordExpandState(node);
-                    FileTreeSorter fileTreeSorter = new FileTreeSorter(tree, currentModel);
-                    fileTreeSorter.sortTree(node, FileTreeSorter.SortType.NAME, true, true);
-                    System.out.println("刷新啦");
+                    FileTreeSorter fileTreeSorter = new FileTreeSorter(currentModel);
+                    fileTreeSorter.setSortRule(FileTreeSorter.SortType.NAME, true);
+                    fileTreeSorter.reSortExistingChildren(node);
                     currentModel.nodeChanged(node);
 //                    jTreeExpandStateManager.restoreExpandState(expandStateMap);
+                    if (callBackFunction != null) callBackFunction.run();
                 });
-                if (hasWorker) Main.getWorkController().removeWork(refreshWork);
+                Main.getWorkController().removeWork(refreshWork);
                 return null;
             }
         };
         String taskID = FileUtil.FILE_IO_EXECUTOR.submit(refreshTask);
-        if (hasWorker) {
-            refreshWork.setTaskID(taskID);
-            Main.getWorkController().addWork(refreshWork);
-        }
+        refreshWork.setTaskID(taskID);
+        Main.getWorkController().addWork(refreshWork);
     }
 
     private void refreshTree(DefaultMutableTreeNode node, JTree tree) {
@@ -614,79 +517,31 @@ public class FileManager extends MiniWindow {
 
     }
 
-    /**
-     * 判断树节点是否在JTree窗口中实际绘制（可见）
-     *
-     * @param tree 目标JTree
-     * @param node 要判断的节点
-     * @return true=节点在窗口中绘制（可见），false=未绘制（不可见）
-     */
     public static boolean isNodeVisibleInViewport(JTree tree, DefaultMutableTreeNode node) {
-        // 1. 节点为空，直接返回false
         if (node == null || tree == null) {
             return false;
         }
 
-        // 2. 构建节点的TreePath（必须通过TreePath判断展开状态）
         TreePath nodePath = new TreePath(node.getPath());
 
-        // 3. 第一步：判断节点是否展开（父节点未折叠，节点本身可被访问）
         if (!tree.isVisible(nodePath)) {
             return false;
         }
 
         try {
-            // 4. 第二步：获取节点在JTree中的绘制矩形
             Rectangle nodeRect = tree.getPathBounds(nodePath);
             if (nodeRect == null) {
                 return false;
             }
 
-            // 5. 第三步：获取JTree的可见视图区域（视口范围）
             Rectangle viewportRect = tree.getVisibleRect();
 
-            // 6. 最终判断：节点矩形与视口矩形有交集 → 节点在窗口中绘制
             return nodeRect.intersects(viewportRect);
         } catch (Exception e) {
-            // 异常情况（如节点未加载）返回false
             return false;
         }
     }
 
-    /**
-     * 扩展：获取JTree中所有当前绘制（可见）的节点
-     *
-     * @param tree     目标JTree
-     * @param rootNode 根节点（从该节点开始遍历）
-     * @return 可见节点列表
-     */
-    public static List<DefaultMutableTreeNode> getVisibleNodesInViewport(JTree tree, DefaultMutableTreeNode rootNode) {
-        List<DefaultMutableTreeNode> visibleNodes = new ArrayList<>();
-        if (rootNode == null || tree == null) {
-            return visibleNodes;
-        }
-        traverseNode(tree, rootNode, visibleNodes);
-        return visibleNodes;
-    }
-
-    private static void traverseNode(JTree tree, DefaultMutableTreeNode node, List<DefaultMutableTreeNode> visibleNodes) {
-        if (isNodeVisibleInViewport(tree, node)) {
-            visibleNodes.add(node);
-        }
-        for (int i = 0; i < node.getChildCount(); i++) {
-            DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) node.getChildAt(i);
-            traverseNode(tree, childNode, visibleNodes);
-        }
-    }
-
-    /**
-     * 修复版：递归加载指定文件夹节点下的所有层级子节点（仅加载，不展开）
-     * 解决无限递归问题，完全隔离展开逻辑
-     *
-     * @param targetNode   目标文件夹节点
-     * @param currentModel 当前树模型
-     * @param callback     加载完成后的回调
-     */
     private void loadAllChildNodes(DefaultMutableTreeNode targetNode, DefaultTreeModel currentModel, Runnable callback) {
         if (targetNode == null || currentModel == null) {
             if (callback != null) callback.run();
@@ -743,13 +598,6 @@ public class FileManager extends MiniWindow {
         FileUtil.FILE_IO_EXECUTOR.submit(task);
     }
 
-    /**
-     * 修复版递归加载：仅加载节点，不触发展开、不调用autoExpandSingleChildNode
-     *
-     * @param parentNode 父节点
-     * @param model      树模型
-     * @param parentFile 父文件夹
-     */
     private void recursiveLoadAllNodes(DefaultMutableTreeNode parentNode, DefaultTreeModel model, File parentFile) throws Exception {
         SwingUtilities.invokeLater(parentNode::removeAllChildren);
 
@@ -788,9 +636,6 @@ public class FileManager extends MiniWindow {
         loadAllChildNodes(targetNode, currentModel, callback);
     }
 
-    /**
-     * 渲染器：每次创建新实例，无状态共享
-     */
     private static class FileTreeRenderer extends RoundLabel implements TreeCellRenderer {
         @Override
         public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf, int row, boolean hasFocus) {
@@ -820,11 +665,6 @@ public class FileManager extends MiniWindow {
         }
     }
 
-    /**
-     * 文件数据载体：纯数据类，无状态
-     *
-     * @param file 改为final，避免被修改
-     */
     public record FileData(File file) {
     }
 

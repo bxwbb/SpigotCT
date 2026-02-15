@@ -14,6 +14,10 @@ public class ShowButton extends JButton {
         this.setVisible(false);
     }
 
+    public void showInfo() {
+        ArrowedTipWindow.info(this, FileUtil.getLang("worker.tip.add"));
+    }
+
     public int getWorkCount() {
         return workCount;
     }
@@ -34,7 +38,6 @@ public class ShowButton extends JButton {
         } else {
             this.setText(FileUtil.getLang("worker.tip.working", String.valueOf(workCount)));
             this.setVisible(true);
-            ArrowedTipWindow.info(this, FileUtil.getLang("worker.tip.add"));
         }
     }
 }

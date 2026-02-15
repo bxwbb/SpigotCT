@@ -1,6 +1,5 @@
 package org.bxwbb.WorkEventer;
 
-import org.bxwbb.UI.ArrowedTipWindow;
 import org.bxwbb.UI.MissionTip;
 import org.bxwbb.Util.FileUtil;
 
@@ -37,6 +36,10 @@ public class WorkController {
             jFrame.setVisible(true);
             jFrame.setLocationRelativeTo(null);
         });
+    }
+
+    public void showInfo() {
+        showButton.showInfo();
     }
 
     /**
