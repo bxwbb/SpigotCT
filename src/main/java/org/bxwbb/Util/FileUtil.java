@@ -29,7 +29,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 public class FileUtil {
 
@@ -42,7 +41,8 @@ public class FileUtil {
     public static String ROOT_PATH = "F:\\McServer\\Plugin\\SpigotCT\\src";
     // 项目核心读取目录列表
     public static List<String> READ_PATH_LIST = List.of(
-            "F:\\McServer\\Plugin\\SpigotCT\\res"
+            "F:\\McServer\\Plugin\\SpigotCT\\res",
+            ".res"
     );
     // 空文件夹图标
     public static String EMPTY_FOLDER_ICON;

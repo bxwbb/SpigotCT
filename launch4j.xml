@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch4jConfig>
+    <dontWrapJar>false</dontWrapJar>
+    <headerType>gui</headerType>
+    <jar>./target/SpigotCT-1.0-SNAPSHOT.jar</jar>
+    <outfile>./target/SpigotCT.exe</outfile>
+    <chdir>.</chdir>
+    <priority>normal</priority>
+    <downloadUrl>https://java.com/download</downloadUrl>
+    <jre>
+        <minVersion>17</minVersion>
+        <maxVersion>21</maxVersion>
+        <jdkPreference>preferJre</jdkPreference>
+        <runtimeBits>64/32</runtimeBits>
+    </jre>
+    <versionInfo>
+        <fileVersion>0.1.4.0</fileVersion>
+        <fileDescription>我的世界spigot插件图形化开发工具</fileDescription>
+        <productVersion>0.1.4.0</productVersion>
+        <productName>SpigotCT</productName>
+        <originalFilename>SpigotCT.exe</originalFilename>
+    </versionInfo>
+</launch4jConfig>

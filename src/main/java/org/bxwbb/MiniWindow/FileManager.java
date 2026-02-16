@@ -158,7 +158,7 @@ public class FileManager extends MiniWindow {
         selectFolderButton.setMinimumSize(new Dimension(30, 30));
         selectFolderButton.setPreferredSize(new Dimension(30, 30));
 
-        Label initLabel = new Label(FileUtil.getLang("miniWindow.fileManager.pleaseSelectFile"));
+        JLabel initLabel = new JLabel(FileUtil.getLang("miniWindow.fileManager.pleaseSelectFile"));
         getCenterPanel().add(initLabel, BorderLayout.CENTER);
         getTopPanel().add(selectFolderButton);
     }

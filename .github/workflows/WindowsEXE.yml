@@ -1,0 +1,51 @@
+name: windows可执行程序构建
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置Java环境
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Maven打包JAR包
+        run: mvn clean package -DskipTests
+
+      - name: 上传构建好的Jar文件
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-jar
+          path: ./target/SpigotCT-1.0-SNAPSHOT.jar
+
+      - name: 安装Launch4j工具
+        run: |
+          Invoke-WebRequest -Uri "https://sourceforge.net/projects/launch4j/files/launch4j-3/3.50/launch4j-3.50-win32.zip/download" -OutFile launch4j.zip
+          Expand-Archive -Path launch4j.zip -DestinationPath C:\launch4j
+          echo "C:\launch4j\launch4j-3.50-win32" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: 转换JAR为Windows EXE
+        run: launch4j ./launch4j.xml
+
+      - name: 创建压缩包（包含EXE和res文件夹）
+        run: |
+          New-Item -ItemType Directory -Path ./dist -Force
+          Copy-Item -Path ./target/SpigotCT.exe -Destination ./dist/
+          Copy-Item -Path ./res -Destination ./dist/ -Recurse -Force
+          Compress-Archive -Path ./dist/* -DestinationPath ./SpigotCT-Windows.zip -Force
+
+      - name: 上传打包好的压缩包
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe-with-res
+          path: ./SpigotCT-Windows.zip
