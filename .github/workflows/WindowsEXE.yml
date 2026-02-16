@@ -2,7 +2,7 @@ name: windows可执行程序构建
 
 on:
   push:
-    branches: [main, master]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -28,11 +28,43 @@ jobs:
           name: java-jar
           path: ./target/SpigotCT-1.0-SNAPSHOT.jar
 
-      - name: 安装Launch4j工具
+      - name: 安装Launch4j工具（修复下载问题）
         run: |
-          Invoke-WebRequest -Uri "https://sourceforge.net/projects/launch4j/files/launch4j-3/3.50/launch4j-3.50-win32.zip/download" -OutFile launch4j.zip
-          Expand-Archive -Path launch4j.zip -DestinationPath C:\launch4j
-          echo "C:\launch4j\launch4j-3.50-win32" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+          
+          $launch4jUrl = "https://github.com/FutureMillennium/launch4j-mirror/releases/download/v3.50/launch4j-3.50-win32.zip"
+          
+          $retryCount = 3
+          $success = $false
+          for ($i=1; $i -le $retryCount; $i++) {
+              try {
+                  Write-Host "尝试第 $i 次下载Launch4j..."
+                  Invoke-WebRequest -Uri $launch4jUrl -OutFile launch4j.zip -TimeoutSec 60 -UseBasicParsing
+                  $success = $true
+                  break
+              }
+              catch {
+                  Write-Host "第 $i 次下载失败: $_"
+                  if ($i -eq $retryCount) {
+                      throw "多次下载Launch4j失败，请检查网络或下载链接"
+                  }
+                  Start-Sleep -Seconds 5
+              }
+          }
+          
+          if (-not $success) {
+              throw "下载Launch4j失败"
+          }
+          
+          Expand-Archive -Path launch4j.zip -DestinationPath C:\launch4j -Force
+          
+          $launch4jPath = "C:\launch4j\launch4j-3.50-win32"
+          if (-not (Test-Path $launch4jPath)) {
+              $launch4jPath = (Get-ChildItem -Path "C:\launch4j" -Directory | Select-Object -First 1).FullName
+          }
+          echo $launch4jPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          
+          launch4j --version
 
       - name: 转换JAR为Windows EXE
         run: launch4j ./launch4j.xml
