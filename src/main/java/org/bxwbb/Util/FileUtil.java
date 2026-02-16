@@ -42,7 +42,7 @@ public class FileUtil {
     // 项目核心读取目录列表
     public static List<String> READ_PATH_LIST = List.of(
             "F:\\McServer\\Plugin\\SpigotCT\\res",
-            ".res"
+            ".\\res"
     );
     // 空文件夹图标
     public static String EMPTY_FOLDER_ICON;
