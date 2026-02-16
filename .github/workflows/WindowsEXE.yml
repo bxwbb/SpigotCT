@@ -28,40 +28,15 @@ jobs:
           name: java-jar
           path: ./target/SpigotCT-1.0-SNAPSHOT.jar
 
-      - name: 安装Launch4j工具（修复下载问题）
+      - name: 配置本地Launch4j工具路径
         run: |
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          
-          $launch4jUrl = "https://github.com/FutureMillennium/launch4j-mirror/releases/download/v3.50/launch4j-3.50-win32.zip"
-          
-          $retryCount = 3
-          $success = $false
-          for ($i=1; $i -le $retryCount; $i++) {
-              try {
-                  Write-Host "尝试第 $i 次下载Launch4j..."
-                  Invoke-WebRequest -Uri $launch4jUrl -OutFile launch4j.zip -TimeoutSec 60 -UseBasicParsing
-                  $success = $true
-                  break
-              }
-              catch {
-                  Write-Host "第 $i 次下载失败: $_"
-                  if ($i -eq $retryCount) {
-                      throw "多次下载Launch4j失败，请检查网络或下载链接"
-                  }
-                  Start-Sleep -Seconds 5
-              }
-          }
-          
-          if (-not $success) {
-              throw "下载Launch4j失败"
-          }
-          
-          Expand-Archive -Path launch4j.zip -DestinationPath C:\launch4j -Force
-          
-          $launch4jPath = "C:\launch4j\launch4j-3.50-win32"
+          $launch4jPath = "$(Get-Location)\launch4j-3.50-win32\launch4j"
           if (-not (Test-Path $launch4jPath)) {
-              $launch4jPath = (Get-ChildItem -Path "C:\launch4j" -Directory | Select-Object -First 1).FullName
+              throw "Launch4j路径不存在: $launch4jPath，请检查文件目录结构"
           }
+          
+          Write-Host "使用本地Launch4j路径: $launch4jPath"
+          
           echo $launch4jPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           
           launch4j --version
