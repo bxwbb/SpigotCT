@@ -1,4 +1,4 @@
-name: windows可执行程序构建
+name: Jar构建
 
 on:
   push:
@@ -22,44 +22,21 @@ jobs:
       - name: Maven打包JAR包
         run: mvn clean package -DskipTests
 
-      - name: 上传构建好的Jar文件
+      - name: 上传单独的Jar文件
         uses: actions/upload-artifact@v4
         with:
           name: java-jar
           path: ./target/SpigotCT-1.0-SNAPSHOT.jar
 
-      - name: 验证本地Launch4j工具并获取完整路径
-        id: get-launch4j-path
-        run: |
-          $launch4jDir = "$(Get-Location)\launch4j-3.50-win32\launch4j"
-          $launch4jExe = "$launch4jDir\launch4j.exe"
-          
-          if (-not (Test-Path $launch4jDir)) {
-              throw "Launch4j目录不存在: $launch4jDir，请检查文件目录结构"
-          }
-          if (-not (Test-Path $launch4jExe)) {
-              throw "launch4j.exe不存在: $launch4jExe，请检查文件是否上传完整"
-          }
-          
-          Write-Host "Launch4j可执行文件路径: $launch4jExe"
-          
-          & $launch4jExe --version
-          
-          echo "launch4j_exe_path=$launch4jExe" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
-      - name: 转换JAR为Windows EXE
-        run: |
-          & ${{ steps.get-launch4j-path.outputs.launch4j_exe_path }} ./launch4j.xml
-
-      - name: 创建压缩包（包含EXE和res文件夹）
+      - name: 创建压缩包
         run: |
           New-Item -ItemType Directory -Path ./dist -Force
-          Copy-Item -Path ./target/SpigotCT.exe -Destination ./dist/
+          Copy-Item -Path ./target/SpigotCT-1.0-SNAPSHOT.jar -Destination ./dist/
           Copy-Item -Path ./res -Destination ./dist/ -Recurse -Force
           Compress-Archive -Path ./dist/* -DestinationPath ./SpigotCT-Windows.zip -Force
 
       - name: 上传打包好的压缩包
         uses: actions/upload-artifact@v4
         with:
-          name: windows-exe-with-res
+          name: windows-jar-with-res
           path: ./SpigotCT-Windows.zip
