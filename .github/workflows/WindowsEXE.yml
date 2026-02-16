@@ -2,8 +2,8 @@ name: Jar¹¹½¨
 
 on:
   push:
-    branches: [ main, master ]
-  workflow_dispatch:
+    tags:
+      - 'v*'
 
 jobs:
   build-windows-exe:
