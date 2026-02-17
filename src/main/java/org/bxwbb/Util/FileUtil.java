@@ -3,8 +3,7 @@ package org.bxwbb.Util;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.bxwbb.Main;
 import org.bxwbb.Util.Task.ControllableThreadPool;
@@ -111,18 +110,15 @@ public class FileUtil {
             return key;
         }
 
-        try (JsonParser jsonParser = objectMapper.createParser(languageJsonFile)) {
-            while (jsonParser.nextToken() != JsonToken.END_OBJECT) {
-                String fieldName = jsonParser.getCurrentName();
-                if (key.equals(fieldName)) {
-                    jsonParser.nextToken();
-                    String template = jsonParser.getText();
-                    LANG_MAP.put(key, template);
-                    return parseTemplate(key, template, params);
-                }
+        try {
+            JsonNode rootNode = objectMapper.readTree(languageJsonFile);
+            if (rootNode.has(key) && (rootNode.get(key).isTextual())) {
+                String template = rootNode.get(key).asText(key);
+                LANG_MAP.put(key, template);
+                return parseTemplate(key, template, params);
             }
         } catch (IOException e) {
-            log.warn("语言文件解析运行时异常，键 - {}，异常信息 -> {}", key, e.toString());
+            log.warn("语言文件解析运行时异常，键 - {}，异常信息 -> ", key, e);
             return key;
         }
 
@@ -263,9 +259,37 @@ public class FileUtil {
                     EMPTY_FOLDER_ICON = jsonObject.getString("empty_folder");
                 }
             } catch (Exception e) {
-                log.error("输入流解析JSON失败 - {}", e.getMessage());
+                log.error("输入流解析JSON失败 - {} ->", file.getPath(), e);
             }
         }
+    }
+
+    public static List<FileTypeInfo> getFileTypeInfoList() {
+        List<FileTypeInfo> ret = new ArrayList<>();
+        File file = FileUtil.loadFile("define\\file_icon.json");
+        try (InputStream fn = new FileInputStream(languageJsonFile)) {
+            JSONObject fileNameObject = JSON.parseObject(fn, StandardCharsets.UTF_8, JSONObject.class);
+            if (file != null) {
+                try (InputStream is = new FileInputStream(file)) {
+                    JSONObject jsonObject = JSON.parseObject(is, StandardCharsets.UTF_8, JSONObject.class);
+                    if (jsonObject.containsKey("define_files")) {
+                        JSONObject files = jsonObject.getJSONObject("define_files");
+                        JSONObject names = fileNameObject.getJSONObject("popWindow.createrFile.file_names");
+                        for (String s : files.keySet()) {
+                            ret.add(new FileTypeInfo(names.getString(s), files.getString(s), s));
+                        }
+                    }
+                } catch (Exception e) {
+                    log.error("输入流解析JSON失败 - {} ->", file.getPath(), e);
+                }
+            }
+        } catch (IOException e) {
+            log.error("输入流解析JSON失败 - {} ->", languageJsonFile.getPath(), e);
+        }
+        return ret;
+    }
+
+    public record FileTypeInfo(String name, String icon, String matches) {
     }
 
     public static Image getFileIcon(File file, int width, int height, boolean isRoot, boolean open) {

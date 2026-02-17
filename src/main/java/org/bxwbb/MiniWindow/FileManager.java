@@ -7,7 +7,10 @@ import org.bxwbb.Swing.CreateFolder;
 import org.bxwbb.UI.IndicatorStatus;
 import org.bxwbb.UI.MissionTip;
 import org.bxwbb.UI.RoundLabel;
-import org.bxwbb.Util.*;
+import org.bxwbb.Util.ClipboardUtil;
+import org.bxwbb.Util.FileUtil;
+import org.bxwbb.Util.JTreeExpandCollapseUtil;
+import org.bxwbb.Util.PathInfoFormatter;
 import org.bxwbb.Util.Task.ControllableThreadTask;
 import org.bxwbb.WorkEventer.Work;
 import org.bxwbb.WorkEventer.WorkControllableThreadTask;
@@ -91,7 +94,8 @@ public class FileManager extends MiniWindow {
                             SwingUtilities.invokeLater(() -> {
                                 TreePath expandedPath = event.getPath();
                                 DefaultMutableTreeNode expandedNode = (DefaultMutableTreeNode) expandedPath.getLastPathComponent();
-                                refreshTreeAsync(expandedNode, newTreeModel, newFileTree);
+//                                refreshTreeAsync(expandedNode, newTreeModel, newFileTree);
+                                continuouslyUnfolded(expandedNode, newTreeModel, newFileTree);
                             });
                         }
 
@@ -163,6 +167,18 @@ public class FileManager extends MiniWindow {
         getTopPanel().add(selectFolderButton);
     }
 
+    private void continuouslyUnfolded(DefaultMutableTreeNode expandedNode, DefaultTreeModel newTreeModel, JTree newFileTree) {
+        refreshTreeAsync(expandedNode, newTreeModel, newFileTree, () -> {
+            if (expandedNode.getChildCount() == 1) {
+                SwingUtilities.invokeLater(() -> {
+                    newFileTree.expandPath(new TreePath(((DefaultMutableTreeNode) expandedNode.getChildAt(0)).getPath()));
+                    getCenterPanel().revalidate();
+                    getCenterPanel().repaint();
+                });
+            }
+        });
+    }
+
     @Override
     public void delete() {
     }
@@ -172,6 +188,7 @@ public class FileManager extends MiniWindow {
             JMenu createNew = new JMenu(FileUtil.getLang("miniWindow.fileManager.popMenu.create"));
             JMenuItem createFile = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.create.file"),
                     FileUtil.getImageIconToPath(Objects.requireNonNull(FileUtil.loadFile(FileUtil.DEFAULT_FILE_ICON)).getPath()));
+            // TODO: 创建文件时自动展开父文件夹节点
             createFile.addActionListener(e -> {
                 File pFile;
                 if (file.isDirectory()) {
@@ -437,6 +454,7 @@ public class FileManager extends MiniWindow {
     }
 
     private void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree, Runnable callBackFunction) {
+        // TODO: 这个方法有时候还是会出现问题
         WorkControllableThreadTask refreshWork = new WorkControllableThreadTask(
                 FileUtil.getLang("miniWindow.fileManager.popMenu.workerName"),
                 "",
@@ -446,15 +464,9 @@ public class FileManager extends MiniWindow {
             @Override
             protected Void doWork() throws InterruptedException {
                 Thread.sleep(500);
-                refreshTree(node, tree);
+                refreshTree(node, tree, currentModel);
                 SwingUtilities.invokeLater(() -> {
-                    JTreeExpandStateManager jTreeExpandStateManager = new JTreeExpandStateManager(tree);
-//                    Map<TreePath, Boolean> expandStateMap = jTreeExpandStateManager.recordExpandState(node);
-                    FileTreeSorter fileTreeSorter = new FileTreeSorter(currentModel);
-                    fileTreeSorter.setSortRule(FileTreeSorter.SortType.NAME, true);
-                    fileTreeSorter.reSortExistingChildren(node);
                     currentModel.nodeChanged(node);
-//                    jTreeExpandStateManager.restoreExpandState(expandStateMap);
                     if (callBackFunction != null) callBackFunction.run();
                 });
                 Main.getWorkController().removeWork(refreshWork);
@@ -466,7 +478,7 @@ public class FileManager extends MiniWindow {
         Main.getWorkController().addWork(refreshWork);
     }
 
-    private void refreshTree(DefaultMutableTreeNode node, JTree tree) {
+    private void refreshTree(DefaultMutableTreeNode node, JTree tree, DefaultTreeModel currentModel) {
         if (!(node.getUserObject() instanceof FileData(File folder))) {
             return;
         }
@@ -477,8 +489,19 @@ public class FileManager extends MiniWindow {
         File[] filesArray = folder.listFiles();
         List<File> folderFiles = filesArray == null ? new ArrayList<>() : new ArrayList<>(List.of(filesArray));
         if (folderFiles.isEmpty()) {
-            node.removeAllChildren();
-            node.add(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.emptyFolders")));
+            // TODO: 完善删除时不能同步节点的逻辑
+            SwingUtilities.invokeLater(() -> {
+                Enumeration<TreeNode> childNodesEnum = node.children();
+                List<DefaultMutableTreeNode> removeNodes = new ArrayList<>();
+                while (childNodesEnum.hasMoreElements()) {
+                    DefaultMutableTreeNode childNode = (DefaultMutableTreeNode) childNodesEnum.nextElement();
+                    removeNodes.add(childNode);
+                }
+                for (DefaultMutableTreeNode removeNode : removeNodes) {
+                    currentModel.removeNodeFromParent(removeNode);
+                }
+                node.add(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.emptyFolders")));
+            });
             return;
         }
         if (isNotLoad(node)) {
@@ -497,7 +520,7 @@ public class FileManager extends MiniWindow {
                 if (fileSet.contains(nodeFile)) {
                     folderFiles.remove(nodeFile);
                     if (nodeFile.isDirectory() && isNodeVisibleInViewport(tree, childMutableNode)) {
-                        refreshTree(childMutableNode, tree);
+                        refreshTree(childMutableNode, tree, currentModel);
                     }
                 } else {
                     removeNodes.add(childMutableNode);
@@ -507,14 +530,78 @@ public class FileManager extends MiniWindow {
             }
         }
 
-        for (DefaultMutableTreeNode removeNode : removeNodes) {
-            node.remove(removeNode);
-        }
+        SwingUtilities.invokeLater(() -> {
+            for (DefaultMutableTreeNode removeNode : removeNodes) {
+                try {
+                    currentModel.removeNodeFromParent(removeNode);
+                } catch (Exception ignored) {
+                }
+            }
 
-        for (File folderFile : folderFiles) {
-            node.add(new DefaultMutableTreeNode(new FileData(folderFile)));
-        }
+            List<File> files = new ArrayList<>();
+            List<File> folders = new ArrayList<>();
+            folderFiles.sort((o1, o2) -> sort(o1.getName(), o2.getName()));
+            for (File folderFile : folderFiles) {
+                if (folderFile.isDirectory()) {
+                    folders.add(folderFile);
+                } else if (folderFile.isFile()) {
+                    files.add(folderFile);
+                }
+            }
+            folderFiles.clear();
+            folderFiles.addAll(folders);
+            folderFiles.addAll(files);
+            if (node.getChildCount() == 0) {
+                for (File folderFile : folderFiles) {
+                    currentModel.insertNodeInto(new DefaultMutableTreeNode(new FileData(folderFile)), node, node.getChildCount());
+                }
+                return;
+            }
 
+            int index = -1, maxIndex;
+            for (File folderFile : folderFiles) {
+                maxIndex = node.getChildCount() - 1;
+                while (true) {
+                    index++;
+                    if (index > maxIndex) {
+                        currentModel.insertNodeInto(new DefaultMutableTreeNode(folderFile), node, index);
+                        break;
+                    }
+                    if (((DefaultMutableTreeNode) node.getChildAt(index)).getUserObject() instanceof FileData(
+                            File cf
+                    )) {
+                        if (folderFile.isDirectory() && cf.isFile()) {
+                            currentModel.insertNodeInto(new DefaultMutableTreeNode(new FileData(folderFile)), node, index);
+                            break;
+                        }
+                        if (folderFile.isFile() && cf.isDirectory()) continue;
+                        if (sort(folderFile.getName(), cf.getName()) < 0) {
+                            currentModel.insertNodeInto(new DefaultMutableTreeNode(new FileData(folderFile)), node, index);
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    private int sort(String a, String b) {
+        if (a.equals(b)) return 0;
+        int minLength = Math.min(a.length(), b.length());
+        for (int i = 0; i < minLength; i++) {
+            char ca = a.charAt(i), cb = b.charAt(i);
+            if (ca + ('A' - 'a') == cb) return -1;
+            if (('a' <= ca && ca <= 'z') || ('A' <= ca && ca <= 'Z')) {
+                ca = Character.toLowerCase(ca);
+            }
+            if (('a' <= cb && cb <= 'z') || ('A' <= cb && cb <= 'Z')) {
+                cb = Character.toLowerCase(cb);
+            }
+            int r = Integer.compare(ca, cb);
+            if (r == 0) continue;
+            return r;
+        }
+        return Integer.compare(a.length(), b.length());
     }
 
     public static boolean isNodeVisibleInViewport(JTree tree, DefaultMutableTreeNode node) {

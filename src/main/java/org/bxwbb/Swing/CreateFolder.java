@@ -123,7 +123,6 @@ public class CreateFolder extends JDialog {
 
     private boolean createFolder() {
         String folderName = nameField.getText();
-        String folderPath = pathField.getText();
         if (folderName == null || folderName.isBlank()) {
             ArrowedTipWindow.error(nameField, FileUtil.getLang("popWindow.createrFolder.warn.emptyName"));
             return false;
