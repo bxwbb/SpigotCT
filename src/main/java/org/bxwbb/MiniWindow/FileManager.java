@@ -158,6 +158,8 @@ public class FileManager extends MiniWindow {
             }
         });
 
+        // TODO: 文件的拖拽功能
+
         selectFolderButton.setMaximumSize(new Dimension(30, 30));
         selectFolderButton.setMinimumSize(new Dimension(30, 30));
         selectFolderButton.setPreferredSize(new Dimension(30, 30));
@@ -188,7 +190,6 @@ public class FileManager extends MiniWindow {
             JMenu createNew = new JMenu(FileUtil.getLang("miniWindow.fileManager.popMenu.create"));
             JMenuItem createFile = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.create.file"),
                     FileUtil.getImageIconToPath(Objects.requireNonNull(FileUtil.loadFile(FileUtil.DEFAULT_FILE_ICON)).getPath()));
-            // TODO: 创建文件时自动展开父文件夹节点
             createFile.addActionListener(e -> {
                 File pFile;
                 if (file.isDirectory()) {
@@ -204,9 +205,13 @@ public class FileManager extends MiniWindow {
                 dialog.setLocationRelativeTo(null);
                 dialog.setVisible(true);
                 if (file.isDirectory()) {
-                    refreshTreeAsync(selectedNode, currentModel, tree);
+                    refreshTreeAsync(selectedNode, currentModel, tree, () -> SwingUtilities.invokeLater(() -> {
+                        tree.expandPath(new TreePath(selectedNode.getPath()));
+                    }));
                 } else {
-                    refreshTreeAsync((DefaultMutableTreeNode) selectedNode.getParent(), currentModel, tree);
+                    refreshTreeAsync((DefaultMutableTreeNode) selectedNode.getParent(), currentModel, tree, () -> SwingUtilities.invokeLater(() -> {
+                        tree.expandPath(new TreePath(((DefaultMutableTreeNode) selectedNode.getParent()).getPath()));
+                    }));
                 }
             });
             createNew.add(createFile);
@@ -366,6 +371,7 @@ public class FileManager extends MiniWindow {
                 }
             });
             popupMenu.add(deleteFile);
+            // TODO: 文件的重命名
             popupMenu.addSeparator();
             if (file.isDirectory()) {
                 JMenuItem refresh = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.refresh"));
@@ -454,7 +460,6 @@ public class FileManager extends MiniWindow {
     }
 
     private void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree, Runnable callBackFunction) {
-        // TODO: 这个方法有时候还是会出现问题
         WorkControllableThreadTask refreshWork = new WorkControllableThreadTask(
                 FileUtil.getLang("miniWindow.fileManager.popMenu.workerName"),
                 "",
@@ -489,7 +494,6 @@ public class FileManager extends MiniWindow {
         File[] filesArray = folder.listFiles();
         List<File> folderFiles = filesArray == null ? new ArrayList<>() : new ArrayList<>(List.of(filesArray));
         if (folderFiles.isEmpty()) {
-            // TODO: 完善删除时不能同步节点的逻辑
             SwingUtilities.invokeLater(() -> {
                 Enumeration<TreeNode> childNodesEnum = node.children();
                 List<DefaultMutableTreeNode> removeNodes = new ArrayList<>();
@@ -500,12 +504,9 @@ public class FileManager extends MiniWindow {
                 for (DefaultMutableTreeNode removeNode : removeNodes) {
                     currentModel.removeNodeFromParent(removeNode);
                 }
-                node.add(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.emptyFolders")));
+                currentModel.insertNodeInto(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.emptyFolders")), node, 0);
             });
             return;
-        }
-        if (isNotLoad(node)) {
-            node.removeAllChildren();
         }
 
         Set<File> fileSet = new HashSet<>(folderFiles);
@@ -564,7 +565,7 @@ public class FileManager extends MiniWindow {
                 while (true) {
                     index++;
                     if (index > maxIndex) {
-                        currentModel.insertNodeInto(new DefaultMutableTreeNode(folderFile), node, index);
+                        currentModel.insertNodeInto(new DefaultMutableTreeNode(new FileData(folderFile)), node, index);
                         break;
                     }
                     if (((DefaultMutableTreeNode) node.getChildAt(index)).getUserObject() instanceof FileData(
