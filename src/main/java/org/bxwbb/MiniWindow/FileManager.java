@@ -9,6 +9,7 @@ import org.bxwbb.UI.IndicatorStatus;
 import org.bxwbb.UI.MissionTip;
 import org.bxwbb.UI.RoundLabel;
 import org.bxwbb.Util.ClipboardUtil;
+import org.bxwbb.Util.DragDrop.FileTransferHandler;
 import org.bxwbb.Util.FileUtil;
 import org.bxwbb.Util.JTreeExpandCollapseUtil;
 import org.bxwbb.Util.PathInfoFormatter;
@@ -24,7 +25,6 @@ import javax.swing.event.TreeExpansionListener;
 import javax.swing.tree.*;
 import java.awt.*;
 import java.awt.datatransfer.UnsupportedFlavorException;
-import java.awt.dnd.DropTarget;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -55,7 +55,6 @@ public class FileManager extends MiniWindow {
     private String cutPath;
     private DefaultMutableTreeNode cutNode;
     private boolean isCut = false;
-    private DropTarget dropTarget;
 
     FileManager self = this;
 
@@ -65,7 +64,6 @@ public class FileManager extends MiniWindow {
         JButton selectFolderButton = new JButton(new ImageIcon(image.getScaledInstance(20, 20, Image.SCALE_SMOOTH)));
 
         // TODO: 文件的拖拽功能
-
 
         selectFolderButton.addActionListener(new AbstractAction() {
             @Override
@@ -92,6 +90,15 @@ public class FileManager extends MiniWindow {
                     newFileTree.setMinimumSize(new Dimension(0, Short.MAX_VALUE));
                     newFileTree.setMaximumSize(new Dimension(Integer.MAX_VALUE, Short.MAX_VALUE));
                     newFileTree.setBackground(Setting.BACKGROUND_COLOR);
+                    newFileTree.setDragEnabled(true);
+                    newFileTree.getTransferHandler().getSourceActions(newFileTree);
+                    newFileTree.getSelectionModel().setSelectionMode(
+                            TreeSelectionModel.SINGLE_TREE_SELECTION
+                    );
+                    newFileTree.setDropMode(DropMode.ON);
+                    newFileTree.setTransferHandler(new FileTransferHandler());
+
+
 
                     newFileTree.getSelectionModel().addTreeSelectionListener(treeSelectionEvent -> openFiles(newFileTree, newTreeModel));
                     newFileTree.addTreeExpansionListener(new TreeExpansionListener() {
@@ -263,7 +270,7 @@ public class FileManager extends MiniWindow {
                         for (File file1 : content.getFileList()) {
                             {
                                 try {
-                                    if (FileUtil.copyFileOrDir(file1.getAbsolutePath(), file.getAbsolutePath())) {
+                                    if (!FileUtil.copyFileOrDir(file1.getAbsolutePath(), file.getAbsolutePath())) {
                                         log.error("复制时出现错误 - {} >> {}", file1.getPath(), file1);
                                     }
                                 } catch (IllegalArgumentException | IOException ex) {
@@ -291,7 +298,7 @@ public class FileManager extends MiniWindow {
             popupMenu.add(pasteFile);
             JMenuItem cutFile = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.cut"));
             cutFile.addActionListener((e) -> {
-                if (ClipboardUtil.copyFileToClipboard(file)) {
+                if (!ClipboardUtil.copyFileToClipboard(file)) {
                     log.error("剪切文件失败 - {}", file.getPath());
                 }
                 isCut = true;
@@ -466,11 +473,11 @@ public class FileManager extends MiniWindow {
         }
     }
 
-    private void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree) {
+    public void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree) {
         refreshTreeAsync(node, currentModel, tree, null);
     }
 
-    private void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree, Runnable callBackFunction) {
+    public void refreshTreeAsync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree, Runnable callBackFunction) {
         WorkControllableThreadTask refreshWork = new WorkControllableThreadTask(
                 FileUtil.getLang("miniWindow.fileManager.popMenu.workerName"),
                 "",
@@ -759,6 +766,10 @@ public class FileManager extends MiniWindow {
             } else {
                 this.setForeground(UIManager.getColor("Tree.textForeground"));
             }
+
+            this.setOpaque(false);
+            this.setFocusable(false);
+            this.setTransferHandler(null);
 
             return this;
         }
