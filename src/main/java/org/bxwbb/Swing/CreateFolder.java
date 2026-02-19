@@ -62,7 +62,6 @@ public class CreateFolder extends JDialog {
         selectionButton.addActionListener(e -> {
 
         });
-        // 当nameField输入时设置长度限制255
         nameField.addKeyListener(new KeyAdapter() {
             @Override
             public void keyTyped(KeyEvent e) {
@@ -70,7 +69,6 @@ public class CreateFolder extends JDialog {
                     ArrowedTipWindow.error(nameField, FileUtil.getLang("popWindow.createrFolder.warn.tooLong"));
                     e.consume();
                 }
-                // 获取hideCheckBox是否选中
                 boolean hide = hideCheckBox.isSelected();
                 if (nameField.getText().startsWith(".") && !hide) {
                     ArrowedTipWindow.warn(nameField, FileUtil.getLang("popWindow.createrFolder.warn.hideFolder"));
@@ -134,6 +132,12 @@ public class CreateFolder extends JDialog {
         if (folderName.matches(".*[\\\\/:*?\"<>|].*")) {
             ArrowedTipWindow.error(nameField, FileUtil.getLang("popWindow.createrFolder.warn.invalidChar"));
             return false;
+        }
+        String path = pathField.getText();
+        if (!path.endsWith("/")) path += "/";
+        path += nameField.getText();
+        if ((new File(path)).exists()) {
+            ArrowedTipWindow.error(nameField, FileUtil.getLang("popWindow.createrFolder.warn.exist"));
         }
         return true;
     }

@@ -937,4 +937,15 @@ public class FileUtil {
         });
     }
 
+    public static boolean renameFile(Path newFile, Path oldFile) {
+        try {
+            boolean ret = FileUtil.copyFileOrDir(oldFile.toString(), newFile.toString());
+            Files.move(oldFile, newFile, StandardCopyOption.REPLACE_EXISTING);
+            return ret && newFile.toFile().exists();
+        } catch (IOException e) {
+            log.error("重命名文件时发生错误 - {} >> {} -> ", oldFile, newFile, e);
+        }
+        return false;
+    }
+
 }

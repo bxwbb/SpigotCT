@@ -5,48 +5,49 @@ import org.bxwbb.UI.JLabelComboBox;
 import org.bxwbb.Util.FileSuffixAdaptiveTool;
 import org.bxwbb.Util.FileUtil;
 import org.bxwbb.Util.Task.ScheduledTaskManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
+import java.awt.event.*;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 
-public class CreateFile extends JDialog {
+public class RenameFile extends JDialog {
+    private static final Logger log = LoggerFactory.getLogger(RenameFile.class);
     private JPanel contentPane;
-    private JButton createButton;
-    private JButton cancelButton;
-    private JLabel fileNameLabel;
-    private JTextField fileNameField;
+    private JButton buttonOK;
+    private JButton buttonCancel;
+    private JTextField newNameTextField;
     private JLabelComboBox fileTypeComboBox;
-    private JTextField filePathField;
-    private JButton selectionButton;
-    private JLabel pathLabel;
+    private JLabel oldNameLabel;
+    private JLabel newNameLabel;
+    private JLabel oldName;
 
     private List<FileUtil.FileTypeInfo> fileTypeInfoList;
     private final String taskID;
+    private final Path oldPath;
 
-    public CreateFile(Path path) {
+    public RenameFile(Path oldPath) {
         setContentPane(contentPane);
         setModal(true);
-        getRootPane().setDefaultButton(createButton);
+        getRootPane().setDefaultButton(buttonOK);
 
         this.setIconImage(FileUtil.getImageIconToPath(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/MiniWindowIcon/FileManager.png")).getPath()).getImage());
-        createButton.setText(FileUtil.getLang("popWindow.createrFile.create"));
-        cancelButton.setText(FileUtil.getLang("popWindow.createrFile.cancel"));
-        fileNameLabel.setText(FileUtil.getLang("popWindow.createrFile.folderName"));
-        pathLabel.setText(FileUtil.getLang("popWindow.createrFile.folderPath"));
-        filePathField.setText(path.toString());
-        selectionButton.setIcon(FileUtil.getImageIconToPath(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/FileManager/SelectFolder.png")).getPath()));
+        buttonOK.setText(FileUtil.getLang("popWindow.renameFile.create"));
+        buttonCancel.setText(FileUtil.getLang("popWindow.renameFile.cancel"));
+        oldNameLabel.setText(FileUtil.getLang("popWindow.renameFile.oldName"));
+        newNameLabel.setText(FileUtil.getLang("popWindow.renameFile.newName"));
+        oldName.setText(String.valueOf(oldPath.getFileName()));
+        this.oldPath = oldPath;
+        newNameTextField.setText(oldName.getText());
 
         initFileTypeComboBox();
 
         taskID = ScheduledTaskManager.getInstance().startFixedDelayTask(300, () -> {
-            String text = fileNameField.getText();
+            String text = newNameTextField.getText();
             int index = 1;
             for (FileUtil.FileTypeInfo fileTypeInfo : fileTypeInfoList) {
                 if (text.matches(fileTypeInfo.matches())) {
@@ -58,9 +59,9 @@ public class CreateFile extends JDialog {
             fileTypeComboBox.setSelectedIndex(0);
         });
 
-        createButton.addActionListener(e -> onOK());
+        buttonOK.addActionListener(e -> onOK());
 
-        cancelButton.addActionListener(e -> onCancel());
+        buttonCancel.addActionListener(e -> onCancel());
 
         // 点击 X 时调用 onCancel()
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
@@ -72,17 +73,11 @@ public class CreateFile extends JDialog {
 
         // 遇到 ESCAPE 时调用 onCancel()
         contentPane.registerKeyboardAction(e -> onCancel(), KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
-        selectionButton.addActionListener(e -> {
-            File file = FileUtil.chooseSingleFolder(null, FileUtil.getLang("miniWindow.fileManager.selectFile"));
-            if (file != null) {
-                filePathField.setText(file.getAbsolutePath());
-            }
-        });
-        fileNameField.addKeyListener(new KeyAdapter() {
+        newNameTextField.addKeyListener(new KeyAdapter() {
             @Override
             public void keyTyped(KeyEvent e) {
-                if (fileNameField.getText().length() > 255) {
-                    ArrowedTipWindow.error(fileNameField, FileUtil.getLang("popWindow.createrFile.warn.tooLong"));
+                if (newNameTextField.getText().length() > 255) {
+                    ArrowedTipWindow.error(newNameTextField, FileUtil.getLang("popWindow.createrFile.warn.tooLong"));
                     e.consume();
                 }
             }
@@ -90,7 +85,7 @@ public class CreateFile extends JDialog {
         fileTypeComboBox.addActionListener(e -> {
             if (fileTypeComboBox.isPopupVisible()) {
                 int index = fileTypeComboBox.getSelectedIndex();
-                String fileName = fileNameField.getText();
+                String fileName = newNameTextField.getText();
                 if (fileName.isBlank()) return;
                 if (index == 0) {
                     int lastDotIndex = fileName.lastIndexOf('.');
@@ -102,12 +97,13 @@ public class CreateFile extends JDialog {
                     FileUtil.FileTypeInfo fileTypeInfo = fileTypeInfoList.get(index - 1);
                     fileName = FileSuffixAdaptiveTool.adaptFileSuffix(fileName, fileTypeInfo.matches());
                 }
-                if (!fileName.equals(fileNameField.getText())) {
-                    fileNameField.setText(fileName);
-                    fileNameField.setCaretPosition(fileName.length());
+                if (!fileName.equals(newNameTextField.getText())) {
+                    newNameTextField.setText(fileName);
+                    newNameTextField.setCaretPosition(fileName.length());
                 }
             }
         });
+
     }
 
     private void initFileTypeComboBox() {
@@ -126,38 +122,47 @@ public class CreateFile extends JDialog {
     }
 
     private void onOK() {
+        // 在此处添加您的代码
+        if (Path.of(newNameTextField.getText()).toFile().exists()) {
+            ArrowedTipWindow.error(newNameTextField, FileUtil.getLang("popWindow.renameFile.warn.exist"));
+            return;
+        }
         boolean ret = createFile();
         if (ret) {
-            FileUtil.createFile(Path.of(filePathField.getText()), fileNameField.getText());
+            Path newPath = Path.of(oldPath.getParent().toString(), newNameTextField.getText());
+            if (!FileUtil.renameFile(newPath, oldPath)) {
+                log.error("重命名文件时出现错误");
+            }
             ScheduledTaskManager.getInstance().stopTask(taskID);
             dispose();
         }
     }
 
     private void onCancel() {
+        // 必要时在此处添加您的代码
         ScheduledTaskManager.getInstance().stopTask(taskID);
         dispose();
     }
 
     private boolean createFile() {
-        String fileName = fileNameField.getText();
+        String fileName = newNameTextField.getText();
         if (fileName == null || fileName.isBlank()) {
-            ArrowedTipWindow.error(fileNameField, FileUtil.getLang("popWindow.createrFile.warn.emptyName"));
+            ArrowedTipWindow.error(newNameTextField, FileUtil.getLang("popWindow.renameFile.warn.emptyName"));
             return false;
         }
         if (fileName.startsWith(" ") || fileName.endsWith(" ")) {
-            ArrowedTipWindow.error(fileNameField, FileUtil.getLang("popWindow.createrFile.warn.space"));
+            ArrowedTipWindow.error(newNameTextField, FileUtil.getLang("popWindow.renameFile.warn.space"));
             return false;
         }
         if (fileName.matches(".*[\\\\/:*?\"<>|].*")) {
-            ArrowedTipWindow.error(fileNameField, FileUtil.getLang("popWindow.createrFile.warn.invalidChar"));
+            ArrowedTipWindow.error(newNameTextField, FileUtil.getLang("popWindow.renameFile.warn.invalidChar"));
             return false;
         }
-        String path = filePathField.getText();
+        String path = newNameTextField.getText();
         if (!path.endsWith("/")) path += "/";
-        path += fileNameField.getText();
+        path += newNameTextField.getText();
         if ((new File(path)).exists()) {
-            ArrowedTipWindow.error(fileNameField, FileUtil.getLang("popWindow.createrFile.warn.exist"));
+            ArrowedTipWindow.error(newNameTextField, FileUtil.getLang("popWindow.renameFile.warn.exist"));
         }
         return true;
     }

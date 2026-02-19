@@ -4,6 +4,7 @@ import org.bxwbb.Main;
 import org.bxwbb.Setting;
 import org.bxwbb.Swing.CreateFile;
 import org.bxwbb.Swing.CreateFolder;
+import org.bxwbb.Swing.RenameFile;
 import org.bxwbb.UI.IndicatorStatus;
 import org.bxwbb.UI.MissionTip;
 import org.bxwbb.UI.RoundLabel;
@@ -23,6 +24,7 @@ import javax.swing.event.TreeExpansionListener;
 import javax.swing.tree.*;
 import java.awt.*;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.dnd.DropTarget;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -53,6 +55,7 @@ public class FileManager extends MiniWindow {
     private String cutPath;
     private DefaultMutableTreeNode cutNode;
     private boolean isCut = false;
+    private DropTarget dropTarget;
 
     FileManager self = this;
 
@@ -60,6 +63,9 @@ public class FileManager extends MiniWindow {
     public void init() {
         Image image = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/FileManager/SelectFolder.png"))).getImage();
         JButton selectFolderButton = new JButton(new ImageIcon(image.getScaledInstance(20, 20, Image.SCALE_SMOOTH)));
+
+        // TODO: 文件的拖拽功能
+
 
         selectFolderButton.addActionListener(new AbstractAction() {
             @Override
@@ -94,7 +100,6 @@ public class FileManager extends MiniWindow {
                             SwingUtilities.invokeLater(() -> {
                                 TreePath expandedPath = event.getPath();
                                 DefaultMutableTreeNode expandedNode = (DefaultMutableTreeNode) expandedPath.getLastPathComponent();
-//                                refreshTreeAsync(expandedNode, newTreeModel, newFileTree);
                                 continuouslyUnfolded(expandedNode, newTreeModel, newFileTree);
                             });
                         }
@@ -158,8 +163,6 @@ public class FileManager extends MiniWindow {
             }
         });
 
-        // TODO: 文件的拖拽功能
-
         selectFolderButton.setMaximumSize(new Dimension(30, 30));
         selectFolderButton.setMinimumSize(new Dimension(30, 30));
         selectFolderButton.setPreferredSize(new Dimension(30, 30));
@@ -205,13 +208,9 @@ public class FileManager extends MiniWindow {
                 dialog.setLocationRelativeTo(null);
                 dialog.setVisible(true);
                 if (file.isDirectory()) {
-                    refreshTreeAsync(selectedNode, currentModel, tree, () -> SwingUtilities.invokeLater(() -> {
-                        tree.expandPath(new TreePath(selectedNode.getPath()));
-                    }));
+                    refreshTreeAsync(selectedNode, currentModel, tree, () -> SwingUtilities.invokeLater(() -> tree.expandPath(new TreePath(selectedNode.getPath()))));
                 } else {
-                    refreshTreeAsync((DefaultMutableTreeNode) selectedNode.getParent(), currentModel, tree, () -> SwingUtilities.invokeLater(() -> {
-                        tree.expandPath(new TreePath(((DefaultMutableTreeNode) selectedNode.getParent()).getPath()));
-                    }));
+                    refreshTreeAsync((DefaultMutableTreeNode) selectedNode.getParent(), currentModel, tree, () -> SwingUtilities.invokeLater(() -> tree.expandPath(new TreePath(((DefaultMutableTreeNode) selectedNode.getParent()).getPath()))));
                 }
             });
             createNew.add(createFile);
@@ -371,7 +370,19 @@ public class FileManager extends MiniWindow {
                 }
             });
             popupMenu.add(deleteFile);
-            // TODO: 文件的重命名
+            JMenuItem renameFile = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.renameFile"));
+            renameFile.addActionListener(e -> {
+                RenameFile dialog = new RenameFile(file.toPath());
+                dialog.setSize(600, 200);
+                dialog.setLocationRelativeTo(null);
+                dialog.setVisible(true);
+                if (file.isDirectory()) {
+                    refreshTreeAsync(selectedNode, currentModel, tree);
+                } else {
+                    refreshTreeAsync((DefaultMutableTreeNode) selectedNode.getParent(), currentModel, tree);
+                }
+            });
+            popupMenu.add(renameFile);
             popupMenu.addSeparator();
             if (file.isDirectory()) {
                 JMenuItem refresh = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.refresh"));
@@ -468,7 +479,7 @@ public class FileManager extends MiniWindow {
         ControllableThreadTask<Void> refreshTask = new ControllableThreadTask<>() {
             @Override
             protected Void doWork() throws InterruptedException {
-                Thread.sleep(500);
+                Thread.sleep(1);
                 refreshTree(node, tree, currentModel);
                 SwingUtilities.invokeLater(() -> {
                     currentModel.nodeChanged(node);
