@@ -67,7 +67,6 @@ public class FileTransferHandler extends TransferHandler {
 
     @Override
     public boolean importData(TransferSupport support) {
-        log.info("行动状态是{}", support.getDropAction());
         if (canImport(support)) {
             try {
                 JTree tree = (JTree) support.getComponent();

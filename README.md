@@ -56,3 +56,4 @@
 总之，欢迎大家来向我提出建议，但是我的学业也比较重，总之会看的(应该吧)
 > QQ: 3754934636
 > 邮箱: <bxwbb@outlook.com>
+> QQ交流频道 点击链接加入腾讯频道【我的世界SpigotCT交流频道】：https://pd.qq.com/s/5woknyuxf

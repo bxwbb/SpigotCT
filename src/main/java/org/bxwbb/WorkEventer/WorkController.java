@@ -13,16 +13,15 @@ public class WorkController {
     private final ShowButton showButton;
     private final List<Work> works = new ArrayList<>();
     private final JFrame jFrame;
-    private final JPanel scrollContentPanel;
+    private final JList<MissionTip> workList;
 
     public WorkController() {
         showButton = new ShowButton();
 
-        scrollContentPanel = new JPanel();
-        scrollContentPanel.setLayout(new BoxLayout(scrollContentPanel, BoxLayout.Y_AXIS));
-        scrollContentPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        workList = new JList<>();
+        workList.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        JScrollPane newScrollPane = new JScrollPane(scrollContentPanel);
+        JScrollPane newScrollPane = new JScrollPane(workList);
         newScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
         newScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 
@@ -59,14 +58,13 @@ public class WorkController {
             missionTip.setOperationCallback(work.operationCallback);
         }
 
-        scrollContentPanel.add(missionTip);
-        scrollContentPanel.add(Box.createVerticalStrut(8));
+        workList.add(missionTip);
 
         works.add(work);
         showButton.workCountAddOne();
 
-        scrollContentPanel.revalidate();
-        scrollContentPanel.repaint();
+        workList.revalidate();
+        workList.repaint();
     }
 
     /**
@@ -79,15 +77,15 @@ public class WorkController {
 
         work.delete();
 
-        scrollContentPanel.remove(work.missionTip);
+        workList.remove(work.missionTip);
 
         work.missionTip = null;
 
         works.remove(work);
         showButton.workCountSubOne();
 
-        scrollContentPanel.revalidate();
-        scrollContentPanel.repaint();
+        workList.revalidate();
+        workList.repaint();
     }
 
     public boolean containsWork(Work work) {

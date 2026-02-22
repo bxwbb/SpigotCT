@@ -14,6 +14,7 @@ import org.bxwbb.Util.FileUtil;
 import org.bxwbb.Util.JTreeExpandCollapseUtil;
 import org.bxwbb.Util.PathInfoFormatter;
 import org.bxwbb.Util.Task.ControllableThreadTask;
+import org.bxwbb.Util.Task.ScheduledTaskManager;
 import org.bxwbb.WorkEventer.Work;
 import org.bxwbb.WorkEventer.WorkControllableThreadTask;
 import org.slf4j.Logger;
@@ -36,8 +37,11 @@ import java.nio.file.attribute.FileOwnerAttributeView;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class FileManager extends MiniWindow {
 
@@ -55,6 +59,7 @@ public class FileManager extends MiniWindow {
     private String cutPath;
     private DefaultMutableTreeNode cutNode;
     private boolean isCut = false;
+    private String refreshTaskID;
 
     FileManager self = this;
 
@@ -62,8 +67,6 @@ public class FileManager extends MiniWindow {
     public void init() {
         Image image = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/FileManager/SelectFolder.png"))).getImage();
         JButton selectFolderButton = new JButton(new ImageIcon(image.getScaledInstance(20, 20, Image.SCALE_SMOOTH)));
-
-        // TODO: 文件的拖拽功能
 
         selectFolderButton.addActionListener(new AbstractAction() {
             @Override
@@ -97,8 +100,6 @@ public class FileManager extends MiniWindow {
                     );
                     newFileTree.setDropMode(DropMode.ON);
                     newFileTree.setTransferHandler(new FileTransferHandler());
-
-
 
                     newFileTree.getSelectionModel().addTreeSelectionListener(treeSelectionEvent -> openFiles(newFileTree, newTreeModel));
                     newFileTree.addTreeExpansionListener(new TreeExpansionListener() {
@@ -151,6 +152,15 @@ public class FileManager extends MiniWindow {
                         newFileTree.expandPath(new TreePath(rootNode.getPath()));
                         centerPanel.revalidate();
                         centerPanel.repaint();
+                        ScheduledTaskManager.getInstance().stopTask(refreshTaskID);
+                        refreshTaskID = ScheduledTaskManager.getInstance().startFixedDelayTask(2500, () -> {
+                            try {
+                                Thread.sleep(2500);
+                            } catch (InterruptedException e) {
+                                log.error("线程睡眠时被打断");
+                            }
+                            self.refreshTreeSync(rootNode, newTreeModel, newFileTree);
+                        });
                     });
 
                     centerPanel.setLayout(new BorderLayout());
@@ -193,6 +203,7 @@ public class FileManager extends MiniWindow {
 
     @Override
     public void delete() {
+        ScheduledTaskManager.getInstance().stopTask(refreshTaskID);
     }
 
     private void createPopMenu(JPopupMenu popupMenu, DefaultMutableTreeNode selectedNode, DefaultTreeModel currentModel, JTree tree) {
@@ -483,22 +494,50 @@ public class FileManager extends MiniWindow {
                 "",
                 FileUtil.FILE_IO_EXECUTOR
         );
-        ControllableThreadTask<Void> refreshTask = new ControllableThreadTask<>() {
-            @Override
-            protected Void doWork() throws InterruptedException {
-                Thread.sleep(1);
-                refreshTree(node, tree, currentModel);
-                SwingUtilities.invokeLater(() -> {
-                    currentModel.nodeChanged(node);
-                    if (callBackFunction != null) callBackFunction.run();
-                });
-                Main.getWorkController().removeWork(refreshWork);
-                return null;
-            }
-        };
-        String taskID = FileUtil.FILE_IO_EXECUTOR.submit(refreshTask);
-        refreshWork.setTaskID(taskID);
-        Main.getWorkController().addWork(refreshWork);
+
+        ReentrantLock refreshLock = new ReentrantLock();
+        Condition addWorkDone = refreshLock.newCondition();
+
+        try {
+            refreshLock.lock();
+            ControllableThreadTask<Void> refreshTask = new ControllableThreadTask<>() {
+                @Override
+                protected Void doWork() throws InterruptedException {
+                    refreshTree(node, tree, currentModel);
+                    SwingUtilities.invokeLater(() -> {
+                        currentModel.nodeChanged(node);
+                        if (callBackFunction != null) callBackFunction.run();
+                    });
+
+                    refreshLock.lock();
+                    try {
+                        if (!addWorkDone.await(1000, TimeUnit.MILLISECONDS)) {
+                            log.error("刷新线程等待时出现错误");
+                        }
+                        Main.getWorkController().removeWork(refreshWork);
+                    } finally {
+                        refreshLock.unlock();
+                    }
+                    return null;
+                }
+            };
+
+            String taskID = FileUtil.FILE_IO_EXECUTOR.submit(refreshTask);
+            refreshWork.setTaskID(taskID);
+            Main.getWorkController().addWork(refreshWork);
+
+            addWorkDone.signal();
+
+        } finally {
+            refreshLock.unlock();
+        }
+    }
+
+    public void refreshTreeSync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree) {
+        refreshTree(node, tree, currentModel);
+        SwingUtilities.invokeLater(() -> {
+            currentModel.nodeChanged(node);
+        });
     }
 
     private void refreshTree(DefaultMutableTreeNode node, JTree tree, DefaultTreeModel currentModel) {
@@ -522,7 +561,6 @@ public class FileManager extends MiniWindow {
                 for (DefaultMutableTreeNode removeNode : removeNodes) {
                     currentModel.removeNodeFromParent(removeNode);
                 }
-                currentModel.insertNodeInto(new DefaultMutableTreeNode(FileUtil.getLang("miniWindow.fileManager.emptyFolders")), node, 0);
             });
             return;
         }
@@ -604,7 +642,7 @@ public class FileManager extends MiniWindow {
         });
     }
 
-    private int sort(String a, String b) {
+    public static int sort(String a, String b) {
         if (a.equals(b)) return 0;
         int minLength = Math.min(a.length(), b.length());
         for (int i = 0; i < minLength; i++) {

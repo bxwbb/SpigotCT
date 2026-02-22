@@ -11,7 +11,6 @@ public class ShowButton extends JButton {
 
     protected ShowButton() {
         super(FileUtil.getLang("worker.tip.worked"));
-        this.setVisible(false);
     }
 
     public void showInfo() {
@@ -34,10 +33,8 @@ public class ShowButton extends JButton {
         this.workCount = workCount;
         if (workCount == 0) {
             this.setText(FileUtil.getLang("worker.tip.worked"));
-            this.setVisible(false);
         } else {
             this.setText(FileUtil.getLang("worker.tip.working", String.valueOf(workCount)));
-            this.setVisible(true);
         }
     }
 }

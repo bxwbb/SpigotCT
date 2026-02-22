@@ -71,11 +71,11 @@ public class MissionTip extends JPanel {
         leftButtonPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, COMPONENT_GAP));
 
         // 初始化按钮
-        Image pauseIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/pause.png"))).getImage();
+        Image pauseIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/Pause.png"))).getImage();
         pauseIcon = pauseIcon.getScaledInstance(20, 20, Image.SCALE_SMOOTH);
         pauseButton = createRoundedButton(new ImageIcon(pauseIcon));
 
-        Image stopIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/stop.png"))).getImage();
+        Image stopIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/Stop.png"))).getImage();
         stopIcon = stopIcon.getScaledInstance(20, 20, Image.SCALE_SMOOTH);
         JButton stopButton = createRoundedButton(new ImageIcon(stopIcon));
 
@@ -297,7 +297,7 @@ public class MissionTip extends JPanel {
             success = operationCallback.onPause();
             if (success) {
                 isPaused = true;
-                Image runIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/run.png"))).getImage();
+                Image runIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/Run.png"))).getImage();
                 runIcon = runIcon.getScaledInstance(20, 20, Image.SCALE_SMOOTH);
                 pauseButton.setIcon(new ImageIcon(runIcon));
                 indicator.setStatus(IndicatorStatus.WAITING_OTHER);
@@ -306,7 +306,7 @@ public class MissionTip extends JPanel {
             success = operationCallback.onResume();
             if (success) {
                 isPaused = false;
-                Image pauseIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/pause.png"))).getImage();
+                Image pauseIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/Pause.png"))).getImage();
                 pauseIcon = pauseIcon.getScaledInstance(20, 20, Image.SCALE_SMOOTH);
                 pauseButton.setIcon(new ImageIcon(pauseIcon));
                 indicator.setStatus(IndicatorStatus.RUNNING);
@@ -319,7 +319,7 @@ public class MissionTip extends JPanel {
         boolean success = operationCallback.onStop();
         if (success) {
             isPaused = false;
-            Image pauseIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/pause.png"))).getImage();
+            Image pauseIcon = new ImageIcon(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/Pause.png"))).getImage();
             pauseIcon = pauseIcon.getScaledInstance(20, 20, Image.SCALE_SMOOTH);
             pauseButton.setIcon(new ImageIcon(pauseIcon));
             progressBar.setValue(0);

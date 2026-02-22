@@ -1,6 +1,7 @@
 package org.bxwbb;
 
 import com.formdev.flatlaf.FlatDarculaLaf;
+import org.bxwbb.Briefcase.BriefcaseControl;
 import org.bxwbb.MiniWindow.StartPage;
 import org.bxwbb.Util.FileUtil;
 import org.bxwbb.Util.Task.ScheduledTaskManager;
@@ -17,6 +18,7 @@ public class Main {
 
     private static final Logger log = LoggerFactory.getLogger(Main.class);
     private static WorkController workController;
+    public static BriefcaseControl briefcaseControl;
 
     public static void main(String[] args) {
         setup();
@@ -57,6 +59,8 @@ public class Main {
         bottomPanel.add(Box.createHorizontalGlue());
         workController = new WorkController();
         bottomPanel.add(workController.getShowButton());
+        briefcaseControl = new BriefcaseControl();
+        bottomPanel.add(briefcaseControl.getOpenBriefcaseButton());
         jFrame.add(bottomPanel, BorderLayout.SOUTH);
         jFrame.setJMenuBar(menuBar);
         jFrame.setVisible(true);
@@ -64,13 +68,17 @@ public class Main {
         jFrame.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                log.info("正在关闭程序...");
-                log.info("关闭文件输入输出线程池...");
-                FileUtil.shutdown();
-                log.info("关闭文件输入输出线程池...完成");
-                log.info("关闭定时任务线程池...");
-                ScheduledTaskManager.getInstance().shutdown();
-                log.info("关闭定时任务线程池...完成");
+                Runnable runnable = () -> {
+                    log.info("正在关闭程序...");
+                    log.info("关闭文件输入输出线程池...");
+                    FileUtil.shutdown();
+                    log.info("关闭文件输入输出线程池...完成");
+                    log.info("关闭定时任务线程池...");
+                    ScheduledTaskManager.getInstance().shutdown();
+                    log.info("关闭定时任务线程池...完成");
+                };
+                Thread shutdownThread = new Thread(runnable);
+                shutdownThread.start();
             }
         });
 

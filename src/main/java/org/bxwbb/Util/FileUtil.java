@@ -13,10 +13,8 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -527,6 +525,10 @@ public class FileUtil {
         return new ImageIcon(new ImageIcon(path).getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
     }
 
+    public static ImageIcon getImageIconToPath(URL path, int width, int height) {
+        return new ImageIcon(new ImageIcon(path).getImage().getScaledInstance(width, height, Image.SCALE_SMOOTH));
+    }
+
     /**
      * 根据路径获取图片Icon
      *
@@ -534,6 +536,10 @@ public class FileUtil {
      * @return 图片Icon
      */
     public static ImageIcon getImageIconToPath(String path) {
+        return getImageIconToPath(path, 20, 20);
+    }
+
+    public static ImageIcon getImageIconToPath(URL path) {
         return getImageIconToPath(path, 20, 20);
     }
 
