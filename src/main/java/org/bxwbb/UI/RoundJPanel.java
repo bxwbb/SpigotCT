@@ -1,10 +1,12 @@
 package org.bxwbb.UI;
 
+import org.bxwbb.UI.Implements.Round;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 
-public class RoundJPanel extends JPanel {
+public class RoundJPanel extends JPanel implements Round {
     private int roundRadius = 10;
     private Color borderColor = new Color(0, 0, 0, 0);
     private int borderWidth = 1;

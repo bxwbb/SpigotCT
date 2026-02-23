@@ -7,7 +7,8 @@ import org.bxwbb.Swing.CreateFolder;
 import org.bxwbb.Swing.RenameFile;
 import org.bxwbb.UI.IndicatorStatus;
 import org.bxwbb.UI.MissionTip;
-import org.bxwbb.UI.RoundLabel;
+import org.bxwbb.UI.RoundJPopupMenu;
+import org.bxwbb.UI.RoundJTree;
 import org.bxwbb.Util.ClipboardUtil;
 import org.bxwbb.Util.DragDrop.FileTransferHandler;
 import org.bxwbb.Util.FileUtil;
@@ -86,7 +87,7 @@ public class FileManager extends MiniWindow {
                     DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode(new FileData(rootFile));
                     DefaultTreeModel newTreeModel = new DefaultTreeModel(rootNode);
 
-                    JTree newFileTree = new JTree(newTreeModel);
+                    RoundJTree newFileTree = new RoundJTree(newTreeModel);
                     newFileTree.setRootVisible(true);
                     newFileTree.setShowsRootHandles(true);
                     newFileTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
@@ -130,7 +131,7 @@ public class FileManager extends MiniWindow {
                                     }
 
                                     if (selectedNode != null) {
-                                        JPopupMenu popupMenu = new JPopupMenu();
+                                        RoundJPopupMenu popupMenu = new RoundJPopupMenu();
                                         createPopMenu(popupMenu, selectedNode, newTreeModel, newFileTree);
                                         popupMenu.show(newFileTree, e.getX(), e.getY());
                                     }
@@ -206,7 +207,7 @@ public class FileManager extends MiniWindow {
         ScheduledTaskManager.getInstance().stopTask(refreshTaskID);
     }
 
-    private void createPopMenu(JPopupMenu popupMenu, DefaultMutableTreeNode selectedNode, DefaultTreeModel currentModel, JTree tree) {
+    private void createPopMenu(RoundJPopupMenu popupMenu, DefaultMutableTreeNode selectedNode, DefaultTreeModel currentModel, JTree tree) {
         if (selectedNode.getUserObject() instanceof FileData(File file)) {
             JMenu createNew = new JMenu(FileUtil.getLang("miniWindow.fileManager.popMenu.create"));
             JMenuItem createFile = new JMenuItem(FileUtil.getLang("miniWindow.fileManager.popMenu.create.file"),
@@ -778,7 +779,7 @@ public class FileManager extends MiniWindow {
         loadAllChildNodes(targetNode, currentModel, callback);
     }
 
-    private static class FileTreeRenderer extends RoundLabel implements TreeCellRenderer {
+    private static class FileTreeRenderer extends JLabel implements TreeCellRenderer {
         @Override
         public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf, int row, boolean hasFocus) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
@@ -798,10 +799,11 @@ public class FileManager extends MiniWindow {
 
             if (selected) {
                 this.setForeground(UIManager.getColor("Tree.selectionForeground"));
-                this.setBackground(UIManager.getColor("Tree.selectionBackground"));
             } else {
                 this.setForeground(UIManager.getColor("Tree.textForeground"));
             }
+            this.setBackground(new Color(0, 0, 0, 0));
+            this.setBorder(BorderFactory.createEmptyBorder(1, 0, 1, 0));
 
             this.setOpaque(false);
             this.setFocusable(false);

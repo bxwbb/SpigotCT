@@ -1,5 +1,7 @@
 package org.bxwbb.UI;
 
+import org.bxwbb.UI.Implements.Round;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
@@ -8,7 +10,7 @@ import java.awt.geom.RoundRectangle2D;
  * 自定义圆角标签（RoundLabel）
  * 支持圆角、背景色、边框，同时保留JLabel显示图片+文字的核心功能
  */
-public class RoundLabel extends JLabel {
+public class RoundLabel extends JLabel implements Round {
     // 圆角半径（默认10像素）
     private int roundRadius = 10;
     // 边框颜色（默认透明，无边框）

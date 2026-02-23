@@ -3,6 +3,7 @@ package org.bxwbb.Briefcase;
 import org.bxwbb.MiniWindow.FileManager;
 import org.bxwbb.Swing.CreateBriefcaseBox;
 import org.bxwbb.UI.PinButton;
+import org.bxwbb.UI.RoundJTree;
 import org.bxwbb.UI.RoundLabel;
 import org.bxwbb.Util.FileUtil;
 import org.bxwbb.Util.UIUtil;
@@ -28,7 +29,7 @@ public class BriefcaseControl extends JFrame {
     // TODO: 使用深度神经网络技术完成公文包类的自动分类
 
     private final JButton openBriefcaseButton;
-    private final JTree briefcaseTree;
+    private final RoundJTree briefcaseTree;
     private final DefaultTreeModel briefcaseTreeModel;
 
 
@@ -47,7 +48,7 @@ public class BriefcaseControl extends JFrame {
 
         DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode();
         rootNode.setUserObject(new BriefcaseNodeData("测试公文包", "这是测试信息", null, BriefcaseNodeType.BRIEFCASE));
-        briefcaseTree = new JTree(rootNode);
+        briefcaseTree = new RoundJTree(rootNode);
         briefcaseTree.setCellRenderer(new CellRenderer());
         briefcaseTree.setDragEnabled(true);
         briefcaseTree.setDropMode(DropMode.ON);

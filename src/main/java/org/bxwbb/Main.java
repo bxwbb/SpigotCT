@@ -3,6 +3,7 @@ package org.bxwbb;
 import com.formdev.flatlaf.FlatDarculaLaf;
 import org.bxwbb.Briefcase.BriefcaseControl;
 import org.bxwbb.MiniWindow.StartPage;
+import org.bxwbb.UI.Animation.AnimationControl;
 import org.bxwbb.Util.FileUtil;
 import org.bxwbb.Util.Task.ScheduledTaskManager;
 import org.bxwbb.WorkEventer.WorkController;
@@ -19,6 +20,7 @@ public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
     private static WorkController workController;
     public static BriefcaseControl briefcaseControl;
+    public static AnimationControl animationControl = new AnimationControl();
 
     public static void main(String[] args) {
         setup();

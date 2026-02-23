@@ -1,12 +1,14 @@
 package org.bxwbb.UI;
 
+import org.bxwbb.UI.Implements.Round;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.geom.RoundRectangle2D;
 
-public class RoundedProgressBar extends JProgressBar {
+public class RoundedProgressBar extends JProgressBar implements Round {
     // 圆角半径
-    private static final int CORNER_RADIUS = 5;
+    private int CORNER_RADIUS = 5;
     // 等待模式标识
     private boolean waiting = false;
     // 渐变偏移量（控制动态效果）
@@ -116,5 +118,16 @@ public class RoundedProgressBar extends JProgressBar {
         }
 
         g2.dispose();
+    }
+
+    @Override
+    public int getRoundRadius() {
+        return CORNER_RADIUS;
+    }
+
+    @Override
+    public void setRoundRadius(int roundRadius) {
+        this.CORNER_RADIUS = roundRadius;
+        this.repaint();
     }
 }
