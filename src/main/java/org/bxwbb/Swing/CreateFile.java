@@ -7,7 +7,6 @@ import org.bxwbb.Util.FileUtil;
 import org.bxwbb.Util.Task.ScheduledTaskManager;
 
 import javax.swing.*;
-import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;

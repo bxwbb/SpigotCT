@@ -1,7 +1,6 @@
 package org.bxwbb.UI;
 
 import javax.swing.*;
-import java.awt.*;
 
 public class JLabelComboBox extends JComboBox<JLabel> {
 

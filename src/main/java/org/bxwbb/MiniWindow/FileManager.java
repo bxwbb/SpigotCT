@@ -535,9 +535,7 @@ public class FileManager extends MiniWindow {
 
     public void refreshTreeSync(DefaultMutableTreeNode node, DefaultTreeModel currentModel, JTree tree) {
         refreshTree(node, tree, currentModel);
-        SwingUtilities.invokeLater(() -> {
-            currentModel.nodeChanged(node);
-        });
+        SwingUtilities.invokeLater(() -> currentModel.nodeChanged(node));
     }
 
     private void refreshTree(DefaultMutableTreeNode node, JTree tree, DefaultTreeModel currentModel) {

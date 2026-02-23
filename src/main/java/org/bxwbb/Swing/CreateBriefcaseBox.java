@@ -8,7 +8,9 @@ import org.bxwbb.Util.FileUtil;
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 public class CreateBriefcaseBox extends JDialog {
     private JPanel contentPane;
