@@ -9,7 +9,6 @@ import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
 import java.awt.event.*;
-import java.util.Objects;
 
 public class CreateBriefcaseBox extends JDialog {
     private JPanel contentPane;
@@ -26,7 +25,6 @@ public class CreateBriefcaseBox extends JDialog {
         setModal(true);
         getRootPane().setDefaultButton(buttonOK);
 
-        this.setIconImage(FileUtil.getImageIconToPath(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/Briefcase/Briefcase.png")).getPath()).getImage());
         buttonOK.setText(FileUtil.getLang("briefcase.popMenu.create.box.create"));
         buttonCancel.setText(FileUtil.getLang("briefcase.popMenu.create.box.cancel"));
         changeColorButton.setText(FileUtil.getLang("briefcase.popMenu.create.box.changeColorButton"));

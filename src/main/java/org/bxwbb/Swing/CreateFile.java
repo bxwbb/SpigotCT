@@ -7,6 +7,7 @@ import org.bxwbb.Util.FileUtil;
 import org.bxwbb.Util.Task.ScheduledTaskManager;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
@@ -35,7 +36,6 @@ public class CreateFile extends JDialog {
         setModal(true);
         getRootPane().setDefaultButton(createButton);
 
-        this.setIconImage(FileUtil.getImageIconToPath(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/MiniWindowIcon/FileManager.png")).getPath()).getImage());
         createButton.setText(FileUtil.getLang("popWindow.createrFile.create"));
         cancelButton.setText(FileUtil.getLang("popWindow.createrFile.cancel"));
         fileNameLabel.setText(FileUtil.getLang("popWindow.createrFile.folderName"));

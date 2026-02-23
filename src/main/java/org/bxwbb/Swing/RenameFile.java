@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
 import java.nio.file.Path;
@@ -35,7 +36,6 @@ public class RenameFile extends JDialog {
         setModal(true);
         getRootPane().setDefaultButton(buttonOK);
 
-        this.setIconImage(FileUtil.getImageIconToPath(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/MiniWindowIcon/FileManager.png")).getPath()).getImage());
         buttonOK.setText(FileUtil.getLang("popWindow.renameFile.create"));
         buttonCancel.setText(FileUtil.getLang("popWindow.renameFile.cancel"));
         oldNameLabel.setText(FileUtil.getLang("popWindow.renameFile.oldName"));

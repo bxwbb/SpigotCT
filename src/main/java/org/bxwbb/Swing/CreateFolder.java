@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
@@ -34,7 +35,6 @@ public class CreateFolder extends JDialog {
         setModal(true);
         getRootPane().setDefaultButton(buttonCreate);
 
-        this.setIconImage(FileUtil.getImageIconToPath(Objects.requireNonNull(getClass().getResource("/SpigotCT/icon/MiniWindowIcon/FileManager.png")).getPath()).getImage());
         buttonCreate.setText(FileUtil.getLang("popWindow.createrFolder.create"));
         buttonCancel.setText(FileUtil.getLang("popWindow.createrFolder.cancel"));
         folderName.setText(FileUtil.getLang("popWindow.createrFolder.folderName"));
